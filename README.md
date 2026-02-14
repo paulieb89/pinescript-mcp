@@ -41,6 +41,33 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 }
 ```
 
+## Usage with Google Antigravity
+
+Add to `~/.gemini/antigravity/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pinescript-docs": {
+      "command": "uvx",
+      "args": ["pinescript-mcp"]
+    }
+  }
+}
+```
+
+Or use the public HTTP server (no install):
+
+```json
+{
+  "mcpServers": {
+    "pinescript-docs": {
+      "serverUrl": "https://pinescript-mcp.fly.dev/mcp"
+    }
+  }
+}
+```
+
 ## Alternative: pip install
 
 If you prefer pip over uvx:
