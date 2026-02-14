@@ -3,7 +3,7 @@
   "name": "io.gitlab.articat1066/pinescript-v6-mcp",
   "title": "Pine Script v6 Documentation",
   "description": "Look up Pine Script v6 functions, validate syntax, and search documentation for AI code generation",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "remotes": [
     {
       "type": "streamable-http",
@@ -14,7 +14,7 @@
     {
       "registryType": "pypi",
       "identifier": "pinescript-mcp",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "transport": {
         "type": "stdio"
       }
