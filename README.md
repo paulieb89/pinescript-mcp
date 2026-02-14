@@ -68,12 +68,29 @@ Or use the public HTTP server (no install):
 }
 ```
 
+## Version Pinning
+
+Documentation is bundled in the package - each version contains a frozen snapshot. For reproducible agent behavior, pin to a specific version:
+
+```json
+{
+  "mcpServers": {
+    "pinescript-docs": {
+      "command": "uvx",
+      "args": ["pinescript-mcp==0.2.1"]
+    }
+  }
+}
+```
+
+Without pinning, `uvx pinescript-mcp` gets the latest version.
+
 ## Alternative: pip install
 
 If you prefer pip over uvx:
 
 ```bash
-pip install pinescript-mcp
+pip install pinescript-mcp==0.2.1
 ```
 
 Note: `"command": "pinescript-mcp"` only works if the install location is in your PATH. The `uvx` method above is more reliable as it handles environments automatically.
