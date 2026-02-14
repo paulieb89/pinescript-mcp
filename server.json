@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.gitlab.articat1066/pinescript-v6-mcp",
+  "title": "Pine Script v6 Documentation",
+  "description": "Look up Pine Script v6 functions, validate syntax, and search documentation for AI code generation",
+  "version": "0.2.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://pinescript-mcp.fly.dev/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "pinescript-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
