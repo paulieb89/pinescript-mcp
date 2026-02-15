@@ -332,7 +332,7 @@ def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
 
     Args:
         path: Relative path to the documentation file (e.g., "reference/functions/ta.md")
-        limit: Maximum characters to return (0 = unlimited, default)
+        limit: Maximum characters to return. Use 30000 for large files to avoid token limits.
         offset: Character offset to start reading from (default: 0)
 
     Returns the contents with metadata header showing total size and current slice.
@@ -359,10 +359,13 @@ def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
 
 @mcp.tool()
 def search_docs(query: str, max_results: int = 10) -> str:
-    """Search across all Pine Script v6 documentation for a keyword or pattern.
+    """Grep for an exact string across all Pine Script v6 documentation.
+
+    Use this for specific function names, syntax, or code patterns (e.g., "ta.sma", "strategy.exit").
+    For natural language questions, use resolve_topic() instead.
 
     Args:
-        query: Search term (case-insensitive substring match)
+        query: Exact string to search for (case-insensitive). Use single terms, not phrases.
         max_results: Maximum number of results to return (default: 10)
 
     Returns matching lines with file paths and line numbers.
@@ -509,10 +512,13 @@ def validate_function(fn_name: str) -> str:
 
 @mcp.tool()
 def resolve_topic(query: str) -> str:
-    """Map a query to relevant Pine Script v6 documentation files.
+    """Find the right documentation for a Pine Script question or concept.
+
+    START HERE for most queries. Handles natural language and multi-word searches.
+    Examples: "trailing stop loss", "how to prevent repainting", "OHLC variables"
 
     Args:
-        query: Natural language query or keyword (e.g., "trailing stop", "repainting", "RSI")
+        query: Natural language query or keywords (e.g., "trailing stop", "repainting", "RSI")
 
     Returns JSON with matched documentation paths ranked by relevance.
     Use get_doc(path) to read the recommended files.
