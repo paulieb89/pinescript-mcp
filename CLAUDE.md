@@ -20,12 +20,13 @@ src/pinescript_mcp/
 - `server.json` - MCP server manifest for registry/discovery
 - `Dockerfile` - For Fly.io HTTP deployment
 
-## MCP Tools (7 total)
+## MCP Tools (8 total)
 
 | Tool | Purpose |
 |------|---------|
 | `list_docs` | List all available doc files |
 | `get_doc` | Read a specific doc file (supports limit/offset) |
+| `get_section` | Get a section by markdown header (eliminates offset guessing) |
 | `search_docs` | Grep for exact strings |
 | `resolve_topic` | Natural language → doc routing (START HERE) |
 | `get_manifest` | Get LLM_MANIFEST.md routing guide |

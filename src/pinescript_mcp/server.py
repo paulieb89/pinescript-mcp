@@ -258,6 +258,49 @@ TOPIC_MAP = {
 }
 
 
+def _find_section(content: str, header: str, include_children: bool = True) -> tuple[str, int, int]:
+    """Find a section in markdown content by header text.
+
+    Returns (section_content, start_line, end_line) or raises ValueError.
+    """
+    lines = content.splitlines()
+
+    # Normalize header query (strip leading #'s if present)
+    header_text = re.sub(r'^#+\s*', '', header).strip().lower()
+
+    start_idx = None
+    start_level = None
+
+    for i, line in enumerate(lines):
+        if line.startswith('#'):
+            # Parse header level and text
+            match = re.match(r'^(#+)\s*(.+)', line)
+            if match:
+                level = len(match.group(1))
+                text = match.group(2).strip().lower()
+
+                if start_idx is None:
+                    # Looking for start
+                    if header_text in text or text in header_text:
+                        start_idx = i
+                        start_level = level
+                else:
+                    # Looking for end
+                    if include_children:
+                        # Stop at same level or higher (smaller number)
+                        if level <= start_level:
+                            return '\n'.join(lines[start_idx:i]), start_idx + 1, i
+                    else:
+                        # Stop at any header
+                        return '\n'.join(lines[start_idx:i]), start_idx + 1, i
+
+    if start_idx is not None:
+        # Section goes to end of file
+        return '\n'.join(lines[start_idx:]), start_idx + 1, len(lines)
+
+    raise ValueError(f"Header not found: {header}")
+
+
 def _validate_path(path: str) -> Path:
     """Validate and resolve a documentation path. Raises ValueError if invalid."""
     # Normalize path
@@ -353,6 +396,32 @@ def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
             return header + "\n" + content
         else:
             return content
+    except ValueError as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+def get_section(path: str, header: str, include_children: bool = True) -> str:
+    """Get a specific section from a documentation file by its header.
+
+    Use this after search_docs() finds a header match. Eliminates offset guessing.
+
+    Args:
+        path: Documentation file path (e.g., "reference/functions/strategy.md")
+        header: Header text to find (e.g., "strategy.exit()" or "## strategy.exit()")
+        include_children: Include nested subsections under the header (default: True)
+
+    Returns the section content from the header to the next same-level header.
+    """
+    try:
+        full_path = _validate_path(path)
+        content = full_path.read_text(encoding="utf-8")
+
+        section, start_line, end_line = _find_section(content, header, include_children)
+
+        header_info = f"# {path} (lines {start_line}-{end_line})\n\n"
+        return header_info + section
+
     except ValueError as e:
         return f"Error: {e}"
 
