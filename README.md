@@ -115,6 +115,7 @@ Connect directly to the hosted server - no Python or uvx needed:
 | Tool | Description |
 |------|-------------|
 | `list_docs()` | List all documentation files with descriptions |
+| `get_section(path, header)` | Read a specific section from a documentation file |
 | `get_doc(path)` | Read a specific documentation file |
 | `search_docs(query)` | Full-text search across all docs |
 | `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
