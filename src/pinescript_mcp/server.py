@@ -636,6 +636,169 @@ def resolve_topic(query: str) -> str:
     })
 
 
+# ---------------------------------------------------------------------------
+# Lint Rules (subset of research/pipeline/pine_lint.py)
+# ---------------------------------------------------------------------------
+
+# Constants that are `const string` but LOOK like enums (LLMs confuse these)
+CONST_STRING_NAMESPACES = {
+    "adjustment", "alert.freq", "currency", "display", "earnings",
+    "extend", "format", "hline.style", "label.style", "line.style",
+    "location", "plot.style", "position", "scale", "session", "shape",
+    "size", "strategy", "strategy.commission", "strategy.direction",
+    "strategy.oca", "text", "xloc", "yloc",
+}
+
+
+def _lint_pine(code: str) -> list[dict]:
+    """
+    Lint Pine Script v6 code and return a list of issues.
+    Embedded subset of rules from research/pipeline/pine_lint.py.
+    """
+    issues = []
+    lines = code.split("\n")
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # Skip comments and empty lines
+        if not stripped or stripped.startswith("//"):
+            continue
+
+        # --- Rule E001: input.enum() with const string constants ---
+        if re.search(r'input\.enum\s*\(', stripped):
+            for ns in CONST_STRING_NAMESPACES:
+                if re.search(rf'\b{re.escape(ns)}\.', stripped):
+                    issues.append({
+                        "line": i,
+                        "rule": "E001_input_enum_const_string",
+                        "message": f"input.enum() cannot be used with {ns}.* constants (they are const string, not enum). Use input.string() with options=[...] instead.",
+                        "severity": "error"
+                    })
+                    break
+
+        # --- Rule E003: Return type keyword on function declaration ---
+        func_decl = re.match(r'^(string|int|float|bool|color|table|line|box|label)\s+(\w+)\s*\(.*\)\s*=>', stripped)
+        if func_decl:
+            ret_type, func_name = func_decl.group(1), func_decl.group(2)
+            issues.append({
+                "line": i,
+                "rule": "E003_return_type_keyword",
+                "message": f"Cannot use '{ret_type}' as return type on function '{func_name}()'. Remove the type keyword — Pine v6 infers return types.",
+                "severity": "error"
+            })
+
+        # --- Rule E005: study() instead of indicator() ---
+        if re.search(r'\bstudy\s*\(', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E005_study_removed",
+                "message": "study() does not exist in Pine v6. Use indicator() instead.",
+                "severity": "error"
+            })
+
+        # --- Rule E006: security() instead of request.security() ---
+        if re.search(r'(?<!request\.)\bsecurity\s*\(', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E006_security_removed",
+                "message": "security() does not exist in v6. Use request.security() instead.",
+                "severity": "error"
+            })
+
+        # --- Rule E007: alertcondition() in strategy ---
+        if re.search(r'\balertcondition\s*\(', stripped):
+            for prev_line in lines[:i]:
+                if re.search(r'\bstrategy\s*\(', prev_line):
+                    issues.append({
+                        "line": i,
+                        "rule": "E007_alertcondition_in_strategy",
+                        "message": "alertcondition() only works in indicator() scripts. Strategies must use alert() with alert.freq_once_per_bar_close.",
+                        "severity": "error"
+                    })
+                    break
+
+        # --- Rule E009: format.currency (doesn't exist) ---
+        if re.search(r'\bformat\.currency\b', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E009_format_currency",
+                "message": "format.currency does not exist in Pine v6. Use format.mintick or manual string formatting.",
+                "severity": "error"
+            })
+
+        # --- Rule E010: Direct comparison to na (must use na() function) ---
+        if re.search(r'[!=]=\s*\bna\s*($|[^a-zA-Z0-9_(])', stripped) or re.search(r'(?<![a-zA-Z0-9_])\bna\s*[!=]=', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E010_direct_na_comparison",
+                "message": "Cannot compare a value to 'na' directly. Use the na() function instead. E.g. `na(x)` not `x == na`.",
+                "severity": "error"
+            })
+
+        # --- Rule E012: Hallucinated function — not in Pine v6 allowlist ---
+        for fn_match in re.finditer(r'\b([a-z][a-z0-9]*(?:\.[a-z_][a-z0-9_]*)+)\s*\(', stripped):
+            fn_name = fn_match.group(1)
+            parts = fn_name.split(".")
+            ns = None
+            for depth in range(len(parts) - 1, 0, -1):
+                candidate = ".".join(parts[:depth])
+                if candidate in PINE_V6_NAMESPACES:
+                    ns = candidate
+                    break
+            if ns and fn_name not in PINE_V6_FUNCTIONS:
+                issues.append({
+                    "line": i,
+                    "rule": "E012_unknown_function",
+                    "message": f"'{fn_name}()' does not exist in Pine Script v6.",
+                    "severity": "error"
+                })
+
+        # --- Rule W001: Missing //@version=6 ---
+        if i == 1 and not stripped.startswith("//@version="):
+            issues.append({
+                "line": 1,
+                "rule": "W001_missing_version",
+                "message": "Missing //@version=6 declaration on line 1.",
+                "severity": "warning"
+            })
+
+        # --- Rule W003: lookahead_on without comment/justification ---
+        if re.search(r'lookahead\s*=\s*barmerge\.lookahead_on', stripped):
+            issues.append({
+                "line": i,
+                "rule": "W003_lookahead_on",
+                "message": "barmerge.lookahead_on can cause future data leak. Use barmerge.lookahead_off unless you explicitly need historical HTF values with [1] offset.",
+                "severity": "warning"
+            })
+
+    return issues
+
+
+@mcp.tool()
+def lint_script(script: str) -> str:
+    """Lint Pine Script for syntax and style issues (free, no API cost).
+
+    Fast static analysis that checks for common issues without using AI.
+
+    Args:
+        script: The Pine Script code to lint.
+
+    Returns:
+        List of lint issues found, or confirmation that no issues were found.
+    """
+    issues = _lint_pine(script)
+
+    if not issues:
+        return json.dumps({"status": "ok", "issues": [], "message": "No issues found"})
+
+    return json.dumps({
+        "status": "issues_found",
+        "count": len(issues),
+        "issues": issues
+    })
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint for container orchestration."""
