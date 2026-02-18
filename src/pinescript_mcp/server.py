@@ -10,10 +10,16 @@ import re
 import sys
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
+import time
 
 # Initialize MCP server
 mcp = FastMCP("pinescript-docs")
+
+
+def _log_tool_call(data: dict) -> None:
+    """Log tool call to stderr for visibility in client logs."""
+    print(f"[TOOL] {json.dumps(data)}", file=sys.stderr, flush=True)
 
 # Path resolution - support both installed package and development
 # For Python 3.10+, use importlib.resources
@@ -330,12 +336,14 @@ def _validate_path(path: str) -> Path:
 
 
 @mcp.tool()
-def list_docs() -> str:
+async def list_docs(ctx: Context) -> str:
     """List all available Pine Script v6 documentation files with descriptions.
 
     Returns a formatted list of documentation files organized by category.
     Use get_doc(path) to read a specific file.
     """
+    start = time.time()
+
     output = ["# Pine Script v6 Documentation", ""]
 
     # Group by category (ordered dict to preserve display order)
@@ -366,11 +374,21 @@ def list_docs() -> str:
                 output.append(f"- `{path}`: {desc}")
             output.append("")
 
-    return "\n".join(output)
+    result = "\n".join(output)
+
+    log_data = {
+        "event": "tool_call",
+        "tool": "list_docs",
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
+
+    return result
 
 
 @mcp.tool()
-def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
+async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> str:
     """Read a specific Pine Script v6 documentation file.
 
     Args:
@@ -380,6 +398,8 @@ def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
 
     Returns the contents with metadata header showing total size and current slice.
     """
+    start = time.time()
+
     try:
         full_path = _validate_path(path)
         content = full_path.read_text(encoding="utf-8")
@@ -393,15 +413,37 @@ def get_doc(path: str, limit: int = 0, offset: int = 0) -> str:
             header = f"# {path} (chars {offset}-{end} of {total})\n"
             if has_more:
                 header += f"# Use offset={end} to continue reading\n"
-            return header + "\n" + content
+            result = header + "\n" + content
         else:
-            return content
+            result = content
+
+        log_data = {
+            "event": "tool_call",
+            "tool": "get_doc",
+            "path": path,
+            "limit": limit,
+            "offset": offset,
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+        await ctx.info(json.dumps(log_data))
+
+        return result
     except ValueError as e:
+        log_data = {
+            "event": "tool_call",
+            "tool": "get_doc",
+            "path": path,
+            "error": str(e),
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+        await ctx.info(json.dumps(log_data))
         return f"Error: {e}"
 
 
 @mcp.tool()
-def get_section(path: str, header: str, include_children: bool = True) -> str:
+async def get_section(path: str, header: str, ctx: Context, include_children: bool = True) -> str:
     """Get a specific section from a documentation file by its header.
 
     Use this after search_docs() finds a header match. Eliminates offset guessing.
@@ -413,6 +455,8 @@ def get_section(path: str, header: str, include_children: bool = True) -> str:
 
     Returns the section content from the header to the next same-level header.
     """
+    start = time.time()
+
     try:
         full_path = _validate_path(path)
         content = full_path.read_text(encoding="utf-8")
@@ -420,14 +464,36 @@ def get_section(path: str, header: str, include_children: bool = True) -> str:
         section, start_line, end_line = _find_section(content, header, include_children)
 
         header_info = f"# {path} (lines {start_line}-{end_line})\n\n"
-        return header_info + section
+        result = header_info + section
+
+        log_data = {
+            "event": "tool_call",
+            "tool": "get_section",
+            "path": path,
+            "header": header,
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+        await ctx.info(json.dumps(log_data))
+
+        return result
 
     except ValueError as e:
+        log_data = {
+            "event": "tool_call",
+            "tool": "get_section",
+            "path": path,
+            "header": header,
+            "error": str(e),
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+        await ctx.info(json.dumps(log_data))
         return f"Error: {e}"
 
 
 @mcp.tool()
-def search_docs(query: str, max_results: int = 10) -> str:
+async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     """Grep for an exact string across all Pine Script v6 documentation.
 
     Use this for specific function names, syntax, or code patterns (e.g., "ta.sma", "strategy.exit").
@@ -439,6 +505,8 @@ def search_docs(query: str, max_results: int = 10) -> str:
 
     Returns matching lines with file paths and line numbers.
     """
+    start = time.time()
+
     results = []
     pattern = re.compile(re.escape(query), re.IGNORECASE)
 
@@ -465,32 +533,57 @@ def search_docs(query: str, max_results: int = 10) -> str:
             break
 
     if not results:
-        return f"No results found for: {query}"
+        result = f"No results found for: {query}"
+    else:
+        output = [f"# Search results for: {query}", f"Found {len(results)} matches", ""]
+        for r in results:
+            output.append(f"**{r['file']}:{r['line']}**")
+            output.append(f"  {r['content']}")
+            output.append("")
+        result = "\n".join(output)
 
-    output = [f"# Search results for: {query}", f"Found {len(results)} matches", ""]
-    for r in results:
-        output.append(f"**{r['file']}:{r['line']}**")
-        output.append(f"  {r['content']}")
-        output.append("")
+    log_data = {
+        "event": "tool_call",
+        "tool": "search_docs",
+        "query": query,
+        "max_results": max_results,
+        "results_found": len(results),
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
 
-    return "\n".join(output)
+    return result
 
 
 @mcp.tool()
-def get_manifest() -> str:
+async def get_manifest(ctx: Context) -> str:
     """Get the LLM_MANIFEST.md file which provides routing guidance for Pine Script topics.
 
     This manifest maps topics to specific documentation files and includes
     routing logic examples for common queries.
     """
+    start = time.time()
+
     manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
     if manifest_path.exists():
-        return manifest_path.read_text(encoding="utf-8")
-    return "Error: LLM_MANIFEST.md not found"
+        result = manifest_path.read_text(encoding="utf-8")
+    else:
+        result = "Error: LLM_MANIFEST.md not found"
+
+    log_data = {
+        "event": "tool_call",
+        "tool": "get_manifest",
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
+
+    return result
 
 
 @mcp.tool()
-def get_functions(namespace: str = "") -> str:
+async def get_functions(ctx: Context, namespace: str = "") -> str:
     """Get valid Pine Script v6 functions, optionally filtered by namespace.
 
     Args:
@@ -500,13 +593,14 @@ def get_functions(namespace: str = "") -> str:
     Returns formatted list of functions. External agents can use this
     to ground their Pine Script generation and avoid hallucinated functions.
     """
+    start = time.time()
+
     if not PINE_V6_FUNCTIONS:
-        return (
+        result = (
             "Error: Function data not loaded. "
             "The pine_v6_functions.json file may be missing from the package."
         )
-
-    if not namespace:
+    elif not namespace:
         # Build compact grouped format
         by_ns: dict[str, list[str]] = {}
         for fn in sorted(PINE_V6_FUNCTIONS):
@@ -515,21 +609,32 @@ def get_functions(namespace: str = "") -> str:
 
         lines = [f"{ns}.*: {', '.join(sorted(fns))}" for ns, fns in sorted(by_ns.items())]
         lines.append(f"Top-level: {', '.join(sorted(PINE_V6_TOPLEVEL))}")
-        return "\n".join(lines)
+        result = "\n".join(lines)
+    else:
+        # Filter by namespace
+        prefix = f"{namespace}."
+        matches = sorted(fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix))
 
-    # Filter by namespace
-    prefix = f"{namespace}."
-    matches = sorted(fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix))
+        if not matches:
+            available = ", ".join(sorted(PINE_V6_NAMESPACES))
+            result = f"No functions found for namespace '{namespace}'. Available namespaces: {available}"
+        else:
+            result = f"# {namespace}.* functions ({len(matches)} total)\n\n" + "\n".join(f"- {fn}" for fn in matches)
 
-    if not matches:
-        available = ", ".join(sorted(PINE_V6_NAMESPACES))
-        return f"No functions found for namespace '{namespace}'. Available namespaces: {available}"
+    log_data = {
+        "event": "tool_call",
+        "tool": "get_functions",
+        "namespace": namespace or "(all)",
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
 
-    return f"# {namespace}.* functions ({len(matches)} total)\n\n" + "\n".join(f"- {fn}" for fn in matches)
+    return result
 
 
 @mcp.tool()
-def validate_function(fn_name: str) -> str:
+async def validate_function(fn_name: str, ctx: Context) -> str:
     """Check if a Pine Script v6 function name is valid.
 
     Args:
@@ -540,47 +645,59 @@ def validate_function(fn_name: str) -> str:
         - type: "namespaced", "toplevel", or null if invalid
         - suggestion: closest match if invalid (for typos)
     """
+    start = time.time()
+
     fn_name = fn_name.strip()
 
     # Check namespaced functions
     if fn_name in PINE_V6_FUNCTIONS:
-        return json.dumps({"valid": True, "type": "namespaced", "function": fn_name})
-
+        result = json.dumps({"valid": True, "type": "namespaced", "function": fn_name})
     # Check top-level functions
-    if fn_name in PINE_V6_TOPLEVEL:
-        return json.dumps({"valid": True, "type": "toplevel", "function": fn_name})
-
-    # Not found - try to find a suggestion
-    suggestion = None
-
-    # Check if it's a namespace prefix typo (e.g., "ta.smaa" -> "ta.sma")
-    if "." in fn_name:
-        ns, _, _name = fn_name.rpartition(".")
-        prefix = f"{ns}."
-        candidates = [fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix)]
-        # Simple prefix match for suggestion
-        for candidate in candidates:
-            if candidate.startswith(fn_name[:len(fn_name)-1]):
-                suggestion = candidate
-                break
-        # If no prefix match, just show the namespace exists
-        if not suggestion and candidates:
-            suggestion = f"namespace '{ns}' exists with {len(candidates)} functions"
+    elif fn_name in PINE_V6_TOPLEVEL:
+        result = json.dumps({"valid": True, "type": "toplevel", "function": fn_name})
     else:
-        # Check top-level for partial match
-        for fn in PINE_V6_TOPLEVEL:
-            if fn.startswith(fn_name[:max(1, len(fn_name)-1)]):
-                suggestion = fn
-                break
+        # Not found - try to find a suggestion
+        suggestion = None
 
-    result = {"valid": False, "type": None, "function": fn_name}
-    if suggestion:
-        result["suggestion"] = suggestion
-    return json.dumps(result)
+        # Check if it's a namespace prefix typo (e.g., "ta.smaa" -> "ta.sma")
+        if "." in fn_name:
+            ns, _, _name = fn_name.rpartition(".")
+            prefix = f"{ns}."
+            candidates = [fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix)]
+            # Simple prefix match for suggestion
+            for candidate in candidates:
+                if candidate.startswith(fn_name[:len(fn_name)-1]):
+                    suggestion = candidate
+                    break
+            # If no prefix match, just show the namespace exists
+            if not suggestion and candidates:
+                suggestion = f"namespace '{ns}' exists with {len(candidates)} functions"
+        else:
+            # Check top-level for partial match
+            for fn in PINE_V6_TOPLEVEL:
+                if fn.startswith(fn_name[:max(1, len(fn_name)-1)]):
+                    suggestion = fn
+                    break
+
+        result_dict = {"valid": False, "type": None, "function": fn_name}
+        if suggestion:
+            result_dict["suggestion"] = suggestion
+        result = json.dumps(result_dict)
+
+    log_data = {
+        "event": "tool_call",
+        "tool": "validate_function",
+        "fn_name": fn_name,
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
+
+    return result
 
 
 @mcp.tool()
-def resolve_topic(query: str) -> str:
+async def resolve_topic(query: str, ctx: Context) -> str:
     """Find the right documentation for a Pine Script question or concept.
 
     START HERE for most queries. Handles natural language and multi-word searches.
@@ -592,6 +709,8 @@ def resolve_topic(query: str) -> str:
     Returns JSON with matched documentation paths ranked by relevance.
     Use get_doc(path) to read the recommended files.
     """
+    start = time.time()
+
     query_lower = query.lower()
 
     # Count matches per path
@@ -615,25 +734,37 @@ def resolve_topic(query: str) -> str:
                     break
 
     if not path_scores:
-        return json.dumps({
+        result = json.dumps({
             "matches": [],
             "query": query,
             "suggestion": "Try search_docs(query) for full-text search"
         })
+    else:
+        # Sort by number of keyword matches (most relevant first)
+        ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
 
-    # Sort by number of keyword matches (most relevant first)
-    ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
+        matches = [
+            {"path": path, "matched_keywords": keywords, "score": len(keywords)}
+            for path, keywords in ranked
+        ]
 
-    matches = [
-        {"path": path, "matched_keywords": keywords, "score": len(keywords)}
-        for path, keywords in ranked
-    ]
+        result = json.dumps({
+            "matches": matches,
+            "query": query,
+            "suggestion": f"Use get_doc('{matches[0]['path']}') to read the top match"
+        })
 
-    return json.dumps({
-        "matches": matches,
+    log_data = {
+        "event": "tool_call",
+        "tool": "resolve_topic",
         "query": query,
-        "suggestion": f"Use get_doc('{matches[0]['path']}') to read the top match"
-    })
+        "matches_found": len(path_scores),
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -776,7 +907,7 @@ def _lint_pine(code: str) -> list[dict]:
 
 
 @mcp.tool()
-def lint_script(script: str) -> str:
+async def lint_script(script: str, ctx: Context) -> str:
     """Lint Pine Script for syntax and style issues (free, no API cost).
 
     Fast static analysis that checks for common issues without using AI.
@@ -787,16 +918,30 @@ def lint_script(script: str) -> str:
     Returns:
         List of lint issues found, or confirmation that no issues were found.
     """
+    start = time.time()
+
     issues = _lint_pine(script)
 
     if not issues:
-        return json.dumps({"status": "ok", "issues": [], "message": "No issues found"})
+        result = json.dumps({"status": "ok", "issues": [], "message": "No issues found"})
+    else:
+        result = json.dumps({
+            "status": "issues_found",
+            "count": len(issues),
+            "issues": issues
+        })
 
-    return json.dumps({
-        "status": "issues_found",
-        "count": len(issues),
-        "issues": issues
-    })
+    log_data = {
+        "event": "tool_call",
+        "tool": "lint_script",
+        "script_length": len(script),
+        "issues_found": len(issues),
+        "duration_ms": int((time.time() - start) * 1000)
+    }
+    _log_tool_call(log_data)
+    await ctx.info(json.dumps(log_data))
+
+    return result
 
 
 @mcp.custom_route("/health", methods=["GET"])
