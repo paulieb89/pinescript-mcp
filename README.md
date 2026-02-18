@@ -77,7 +77,7 @@ Documentation is bundled in the package - each version contains a frozen snapsho
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.2.1"]
+      "args": ["pinescript-mcp==0.4.1"]
     }
   }
 }
@@ -90,7 +90,7 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 If you prefer pip over uvx:
 
 ```bash
-pip install pinescript-mcp==0.2.1
+pip install pinescript-mcp==0.4.1
 ```
 
 Note: `"command": "pinescript-mcp"` only works if the install location is in your PATH. The `uvx` method above is more reliable as it handles environments automatically.
@@ -122,6 +122,7 @@ Connect directly to the hosted server - no Python or uvx needed:
 | `validate_function(name)` | Check if a function exists in Pine v6 |
 | `resolve_topic(query)` | Map a question to relevant docs |
 | `get_manifest()` | Get routing guidance for topics |
+| `lint_script(script)` | Lint Pine Script for syntax/style issues (free, no API cost) |
 
 ## Example Queries
 
