@@ -20,7 +20,7 @@ src/pinescript_mcp/
 - `server.json` - MCP server manifest for registry/discovery
 - `Dockerfile` - For Fly.io HTTP deployment
 
-## MCP Tools (8 total)
+## MCP Tools (9 total)
 
 | Tool | Purpose |
 |------|---------|
@@ -32,6 +32,18 @@ src/pinescript_mcp/
 | `get_manifest` | Get LLM_MANIFEST.md routing guide |
 | `get_functions` | List valid Pine v6 functions by namespace |
 | `validate_function` | Check if a function name is valid |
+| `lint_script` | Lint Pine Script for syntax/style issues (free, no API) |
+
+## Logging
+
+All tools log calls to stderr with structured JSON:
+```
+[TOOL] {"event": "tool_call", "tool": "resolve_topic", "query": "...", "duration_ms": 5}
+```
+
+Visible in:
+- Claude Code VSCode output panel
+- `fly logs -a pinescript-mcp`
 
 ## Development Commands
 
