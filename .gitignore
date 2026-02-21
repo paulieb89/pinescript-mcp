@@ -34,3 +34,9 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local/ephemeral
+mcp.json
+SESSION.md
+.claude/
+PLAN-*.md
