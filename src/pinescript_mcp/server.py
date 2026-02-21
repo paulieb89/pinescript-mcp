@@ -16,6 +16,8 @@ from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToo
 from pydantic import BaseModel
 import time
 
+from pinescript_mcp import __version__
+
 
 # ---------------------------------------------------------------------------
 # Pydantic Models for Structured Output
@@ -1156,7 +1158,7 @@ Use the Pine Script v6 documentation to ensure accuracy."""
 async def health_check(request):
     """Health check endpoint for container orchestration."""
     from starlette.responses import JSONResponse
-    return JSONResponse({"status": "healthy", "server": "pinescript-docs"})
+    return JSONResponse({"status": "healthy", "server": "pinescript-docs", "version": __version__})
 
 
 def main():
