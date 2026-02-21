@@ -13,8 +13,13 @@ from typing import Literal
 
 from fastmcp import FastMCP, Context
 from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToolSettings
+from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
+from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
+from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from key_value.aio.stores.disk import DiskStore
 from pydantic import BaseModel
 import time
+import os
 
 from pinescript_mcp import __version__
 
@@ -59,11 +64,36 @@ class ResolveResult(BaseModel):
     query: str
     suggestion: str
 
+# Cache directory for persistent response caching (survives Fly.io suspend)
+CACHE_DIR = Path(os.getenv("CACHE_DIR", "/tmp/pinescript-cache"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 # Initialize MCP server
 mcp = FastMCP("pinescript-docs")
 
-# Add caching middleware for static doc lookups (1 hour TTL)
+# ---------------------------------------------------------------------------
+# Production Middleware Stack (order matters: first added = outermost)
+# ---------------------------------------------------------------------------
+
+# 1. Rate limiting - protect from abuse (generous for docs server)
+mcp.add_middleware(RateLimitingMiddleware(
+    max_requests_per_second=10.0,  # 10 sustained req/s
+    burst_capacity=50,             # Allow bursts up to 50
+))
+
+# 2. Structured logging - JSON logs for Fly.io log aggregation
+mcp.add_middleware(StructuredLoggingMiddleware(
+    include_payloads=False,        # Don't log full payloads (keeps logs compact)
+))
+
+# 3. Response limiting - prevent overwhelming client context
+mcp.add_middleware(ResponseLimitingMiddleware(
+    max_size=200_000,              # 200KB limit
+))
+
+# 4. Response caching with disk persistence (survives restarts)
 mcp.add_middleware(ResponseCachingMiddleware(
+    cache_storage=DiskStore(directory=str(CACHE_DIR)),
     call_tool_settings=CallToolSettings(
         ttl=3600,  # 1 hour
         included_tools=["get_doc", "get_section", "list_docs", "get_manifest"]
