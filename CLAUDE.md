@@ -61,6 +61,6 @@ Tools log to stderr (visible in VSCode output panel, `fly logs`):
 3. Test locally, bump version, publish
 
 ### Updating bundled docs
-1. Edit docs in main repo (`concepts/`, `reference/`)
-2. Copy to `src/pinescript_mcp/docs/`
+1. Edit docs in main repo (`docs/concepts/`, `docs/reference/`, etc.)
+2. Run `./sync-docs.sh` to copy to `src/pinescript_mcp/docs/`
 3. Bump version, publish

@@ -9,12 +9,64 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Literal
 
-from mcp.server.fastmcp import FastMCP, Context
+from fastmcp import FastMCP, Context
+from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToolSettings
+from pydantic import BaseModel
 import time
+
+
+# ---------------------------------------------------------------------------
+# Pydantic Models for Structured Output
+# ---------------------------------------------------------------------------
+
+class LintIssue(BaseModel):
+    """A single lint issue found in Pine Script code."""
+    line: int
+    rule: str
+    message: str
+    severity: Literal["error", "warning"]
+
+
+class LintResult(BaseModel):
+    """Result of linting Pine Script code."""
+    status: Literal["ok", "issues_found"]
+    count: int
+    issues: list[LintIssue]
+
+
+class ValidationResult(BaseModel):
+    """Result of validating a Pine Script function name."""
+    valid: bool
+    type: Literal["namespaced", "toplevel"] | None
+    function: str
+    suggestion: str | None = None
+
+
+class TopicMatch(BaseModel):
+    """A matched documentation topic."""
+    path: str
+    matched_keywords: list[str]
+    score: int
+
+
+class ResolveResult(BaseModel):
+    """Result of resolving a topic query."""
+    matches: list[TopicMatch]
+    query: str
+    suggestion: str
 
 # Initialize MCP server
 mcp = FastMCP("pinescript-docs")
+
+# Add caching middleware for static doc lookups (1 hour TTL)
+mcp.add_middleware(ResponseCachingMiddleware(
+    call_tool_settings=CallToolSettings(
+        ttl=3600,  # 1 hour
+        included_tools=["get_doc", "get_section", "list_docs", "get_manifest"]
+    )
+))
 
 
 def _log_tool_call(data: dict) -> None:
@@ -335,7 +387,7 @@ def _validate_path(path: str) -> Path:
     return full_path
 
 
-@mcp.tool()
+@mcp.tool(tags={"reference", "discovery"})
 async def list_docs(ctx: Context) -> str:
     """List all available Pine Script v6 documentation files with descriptions.
 
@@ -387,7 +439,7 @@ async def list_docs(ctx: Context) -> str:
     return result
 
 
-@mcp.tool()
+@mcp.tool(tags={"reference"})
 async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> str:
     """Read a specific Pine Script v6 documentation file.
 
@@ -442,7 +494,7 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
         return f"Error: {e}"
 
 
-@mcp.tool()
+@mcp.tool(tags={"reference"})
 async def get_section(path: str, header: str, ctx: Context, include_children: bool = True) -> str:
     """Get a specific section from a documentation file by its header.
 
@@ -492,7 +544,7 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
         return f"Error: {e}"
 
 
-@mcp.tool()
+@mcp.tool(tags={"search"})
 async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     """Grep for an exact string across all Pine Script v6 documentation.
 
@@ -556,7 +608,7 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     return result
 
 
-@mcp.tool()
+@mcp.tool(tags={"reference", "discovery"})
 async def get_manifest(ctx: Context) -> str:
     """Get the LLM_MANIFEST.md file which provides routing guidance for Pine Script topics.
 
@@ -582,7 +634,7 @@ async def get_manifest(ctx: Context) -> str:
     return result
 
 
-@mcp.tool()
+@mcp.tool(tags={"reference", "validation"})
 async def get_functions(ctx: Context, namespace: str = "") -> str:
     """Get valid Pine Script v6 functions, optionally filtered by namespace.
 
@@ -633,17 +685,15 @@ async def get_functions(ctx: Context, namespace: str = "") -> str:
     return result
 
 
-@mcp.tool()
-async def validate_function(fn_name: str, ctx: Context) -> str:
+@mcp.tool(tags={"validation"})
+async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
     """Check if a Pine Script v6 function name is valid.
 
     Args:
         fn_name: Function name to validate (e.g., "ta.sma", "strategy.entry", "plot")
 
-    Returns JSON with:
-        - valid: boolean indicating if function exists
-        - type: "namespaced", "toplevel", or null if invalid
-        - suggestion: closest match if invalid (for typos)
+    Returns:
+        ValidationResult with valid status, type, and suggestion if invalid.
     """
     start = time.time()
 
@@ -651,10 +701,10 @@ async def validate_function(fn_name: str, ctx: Context) -> str:
 
     # Check namespaced functions
     if fn_name in PINE_V6_FUNCTIONS:
-        result = json.dumps({"valid": True, "type": "namespaced", "function": fn_name})
+        result = ValidationResult(valid=True, type="namespaced", function=fn_name)
     # Check top-level functions
     elif fn_name in PINE_V6_TOPLEVEL:
-        result = json.dumps({"valid": True, "type": "toplevel", "function": fn_name})
+        result = ValidationResult(valid=True, type="toplevel", function=fn_name)
     else:
         # Not found - try to find a suggestion
         suggestion = None
@@ -679,10 +729,7 @@ async def validate_function(fn_name: str, ctx: Context) -> str:
                     suggestion = fn
                     break
 
-        result_dict = {"valid": False, "type": None, "function": fn_name}
-        if suggestion:
-            result_dict["suggestion"] = suggestion
-        result = json.dumps(result_dict)
+        result = ValidationResult(valid=False, type=None, function=fn_name, suggestion=suggestion)
 
     log_data = {
         "event": "tool_call",
@@ -696,8 +743,8 @@ async def validate_function(fn_name: str, ctx: Context) -> str:
     return result
 
 
-@mcp.tool()
-async def resolve_topic(query: str, ctx: Context) -> str:
+@mcp.tool(tags={"search", "entry"})
+async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
     """Find the right documentation for a Pine Script question or concept.
 
     START HERE for most queries. Handles natural language and multi-word searches.
@@ -706,8 +753,9 @@ async def resolve_topic(query: str, ctx: Context) -> str:
     Args:
         query: Natural language query or keywords (e.g., "trailing stop", "repainting", "RSI")
 
-    Returns JSON with matched documentation paths ranked by relevance.
-    Use get_doc(path) to read the recommended files.
+    Returns:
+        ResolveResult with matched documentation paths ranked by relevance.
+        Use get_doc(path) to read the recommended files.
     """
     start = time.time()
 
@@ -734,25 +782,25 @@ async def resolve_topic(query: str, ctx: Context) -> str:
                     break
 
     if not path_scores:
-        result = json.dumps({
-            "matches": [],
-            "query": query,
-            "suggestion": "Try search_docs(query) for full-text search"
-        })
+        result = ResolveResult(
+            matches=[],
+            query=query,
+            suggestion="Try search_docs(query) for full-text search"
+        )
     else:
         # Sort by number of keyword matches (most relevant first)
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
 
         matches = [
-            {"path": path, "matched_keywords": keywords, "score": len(keywords)}
+            TopicMatch(path=path, matched_keywords=keywords, score=len(keywords))
             for path, keywords in ranked
         ]
 
-        result = json.dumps({
-            "matches": matches,
-            "query": query,
-            "suggestion": f"Use get_doc('{matches[0]['path']}') to read the top match"
-        })
+        result = ResolveResult(
+            matches=matches,
+            query=query,
+            suggestion=f"Use get_doc('{matches[0].path}') to read the top match"
+        )
 
     log_data = {
         "event": "tool_call",
@@ -903,11 +951,72 @@ def _lint_pine(code: str) -> list[dict]:
                 "severity": "warning"
             })
 
+        # --- Rule E013: input.enum() with options array (v6 requires enum type) ---
+        if re.search(r'input\.enum\s*\([^)]*options\s*=\s*\[', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E013_input_enum_options_array",
+                "message": "input.enum() does not use options=[...] array. Pass enum values directly as defval. For string options, use input.string(options=[...]) instead.",
+                "severity": "error"
+            })
+
+        # --- Rule E014: strategy() without title parameter ---
+        if re.search(r'\bstrategy\s*\(', stripped):
+            # Check if title= or first positional arg (string) is present
+            if not re.search(r'strategy\s*\(\s*["\']', stripped) and not re.search(r'strategy\s*\([^)]*title\s*=', stripped):
+                issues.append({
+                    "line": i,
+                    "rule": "E014_strategy_missing_title",
+                    "message": "strategy() requires a title parameter. Add title=\"Strategy Name\" or pass it as the first argument.",
+                    "severity": "error"
+                })
+
+        # --- Rule E015: Mismatched string quotes ---
+        # Check for strings that start with one quote type but don't close properly
+        single_quotes = stripped.count("'") - stripped.count("\\'")
+        double_quotes = stripped.count('"') - stripped.count('\\"')
+        if single_quotes % 2 != 0 or double_quotes % 2 != 0:
+            # Skip if it's a comment line or inside a multi-line string context
+            if not stripped.startswith("//"):
+                issues.append({
+                    "line": i,
+                    "rule": "E015_mismatched_quotes",
+                    "message": "Possible mismatched string quotes. Ensure all strings are properly closed.",
+                    "severity": "error"
+                })
+
+        # --- Rule W004: max_bars_back set very high ---
+        max_bars_match = re.search(r'max_bars_back\s*[=:]\s*(\d+)', stripped)
+        if max_bars_match:
+            value = int(max_bars_match.group(1))
+            if value >= 5000:
+                issues.append({
+                    "line": i,
+                    "rule": "W004_high_max_bars_back",
+                    "message": f"max_bars_back={value} is very high and may impact performance. Consider if you really need this many historical bars.",
+                    "severity": "warning"
+                })
+
+        # --- Rule W005: Variable declared with var but potentially unused ---
+        # Simple heuristic: var declaration at start of line with common unused patterns
+        var_match = re.match(r'^var\s+(?:int|float|bool|string|color|line|box|label|table)?\s*(\w+)\s*=', stripped)
+        if var_match:
+            var_name = var_match.group(1)
+            # Check if variable appears elsewhere in code (simple check)
+            var_usage_count = code.count(var_name)
+            if var_usage_count == 1:  # Only the declaration
+                issues.append({
+                    "line": i,
+                    "rule": "W005_potentially_unused_var",
+                    "message": f"Variable '{var_name}' is declared but may be unused. Verify it's referenced elsewhere.",
+                    "severity": "warning"
+                })
+
     return issues
 
 
-@mcp.tool()
-async def lint_script(script: str, ctx: Context) -> str:
+@mcp.tool(tags={"validation"})
+async def lint_script(script: str, ctx: Context) -> LintResult:
     """Lint Pine Script for syntax and style issues (free, no API cost).
 
     Fast static analysis that checks for common issues without using AI.
@@ -916,20 +1025,18 @@ async def lint_script(script: str, ctx: Context) -> str:
         script: The Pine Script code to lint.
 
     Returns:
-        List of lint issues found, or confirmation that no issues were found.
+        LintResult with status, count, and list of issues found.
     """
     start = time.time()
 
-    issues = _lint_pine(script)
+    raw_issues = _lint_pine(script)
+    issues = [LintIssue(**issue) for issue in raw_issues]
 
-    if not issues:
-        result = json.dumps({"status": "ok", "issues": [], "message": "No issues found"})
-    else:
-        result = json.dumps({
-            "status": "issues_found",
-            "count": len(issues),
-            "issues": issues
-        })
+    result = LintResult(
+        status="ok" if not issues else "issues_found",
+        count=len(issues),
+        issues=issues
+    )
 
     log_data = {
         "event": "tool_call",
@@ -942,6 +1049,80 @@ async def lint_script(script: str, ctx: Context) -> str:
     await ctx.info(json.dumps(log_data))
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Prompt Templates
+# ---------------------------------------------------------------------------
+
+@mcp.prompt
+def debug_error(error_message: str, code: str) -> str:
+    """Debug a Pine Script compilation error.
+
+    Args:
+        error_message: The error message from TradingView compiler
+        code: The Pine Script code that produced the error
+    """
+    return f"""Analyze this Pine Script v6 compilation error and suggest a fix.
+
+**Error:**
+{error_message}
+
+**Code:**
+```pine
+{code}
+```
+
+**Analysis steps:**
+1. Identify the root cause of the error
+2. Check for Pine Script v6 syntax issues (study→indicator, security→request.security)
+3. Verify all function names are valid v6 functions
+4. Check for type mismatches or missing parameters
+5. Provide a corrected code snippet"""
+
+
+@mcp.prompt
+def convert_v5_to_v6(code: str) -> str:
+    """Convert Pine Script v5 code to v6.
+
+    Args:
+        code: Pine Script v5 code to convert
+    """
+    return f"""Convert this Pine Script v5 code to v6 syntax.
+
+**v5 Code:**
+```pine
+{code}
+```
+
+**Key v5 → v6 changes to apply:**
+- `study()` → `indicator()`
+- `security()` → `request.security()`
+- `color.new()` parameter order may differ
+- Check for deprecated functions
+- Add `//@version=6` header
+
+Provide the converted v6 code with explanations for each change made."""
+
+
+@mcp.prompt
+def explain_function(function_name: str) -> str:
+    """Explain a Pine Script function in detail.
+
+    Args:
+        function_name: The function to explain (e.g., "ta.rsi", "strategy.entry")
+    """
+    return f"""Explain the Pine Script v6 function: `{function_name}`
+
+Please provide:
+1. **Purpose**: What does this function do?
+2. **Syntax**: Full function signature with all parameters
+3. **Parameters**: Explain each parameter and its valid values
+4. **Return type**: What does the function return?
+5. **Example**: A practical usage example
+6. **Common pitfalls**: Any gotchas or common mistakes to avoid
+
+Use the Pine Script v6 documentation to ensure accuracy."""
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -957,19 +1138,14 @@ def main():
     import os
 
     parser = argparse.ArgumentParser(description="Pine Script v6 MCP Server")
-    parser.add_argument("--http", action="store_true", help="Run as HTTP server (SSE transport)")
+    parser.add_argument("--http", action="store_true", help="Run as HTTP server")
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 8000)),
                         help="HTTP port (default: 8000 or $PORT)")
     parser.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
     args = parser.parse_args()
 
     if args.http:
-        # Configure host/port for HTTP transport
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        # Disable DNS rebinding protection for public server
-        mcp.settings.transport_security.enable_dns_rebinding_protection = False
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="http", host=args.host, port=args.port)
     else:
         mcp.run()
 

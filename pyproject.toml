@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "mcp>=1.26.0",
+    "fastmcp>=2.0.0",
     "uvicorn>=0.27.0",
 ]
 

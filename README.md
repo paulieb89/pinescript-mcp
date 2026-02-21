@@ -114,15 +114,23 @@ Connect directly to the hosted server - no Python or uvx needed:
 
 | Tool | Description |
 |------|-------------|
-| `list_docs()` | List all documentation files with descriptions |
-| `get_section(path, header)` | Read a specific section from a documentation file |
+| `resolve_topic(query)` | **Start here** - Map a question to relevant docs |
 | `get_doc(path)` | Read a specific documentation file |
+| `get_section(path, header)` | Read a specific section from a documentation file |
 | `search_docs(query)` | Full-text search across all docs |
+| `list_docs()` | List all documentation files with descriptions |
 | `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
 | `validate_function(name)` | Check if a function exists in Pine v6 |
-| `resolve_topic(query)` | Map a question to relevant docs |
+| `lint_script(script)` | Lint Pine Script (15 rules, free, no API cost) |
 | `get_manifest()` | Get routing guidance for topics |
-| `lint_script(script)` | Lint Pine Script for syntax/style issues (free, no API cost) |
+
+## Available Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `debug_error(error, code)` | Analyze a Pine Script compilation error |
+| `convert_v5_to_v6(code)` | Convert Pine Script v5 code to v6 syntax |
+| `explain_function(name)` | Explain a Pine Script function in detail |
 
 ## Example Queries
 
@@ -149,6 +157,32 @@ AI models often hallucinate Pine Script functions or use deprecated v5 syntax. T
 - Deprecated syntax from v4/v5
 - Incorrect parameter orders
 - Missing required arguments
+
+## Lint Rules (15 total)
+
+The `lint_script` tool checks for common Pine Script issues without using AI:
+
+| Rule | Type | Description |
+|------|------|-------------|
+| E001 | Error | `input.enum()` with const string constants |
+| E003 | Error | Return type keyword on function declaration |
+| E005 | Error | `study()` → use `indicator()` |
+| E006 | Error | `security()` → use `request.security()` |
+| E007 | Error | `alertcondition()` in strategy scripts |
+| E009 | Error | `format.currency` doesn't exist |
+| E010 | Error | Direct `na` comparison (use `na()` function) |
+| E012 | Error | Unknown/hallucinated function |
+| E013 | Error | `input.enum()` with options array |
+| E014 | Error | `strategy()` missing title parameter |
+| E015 | Error | Mismatched string quotes |
+| W001 | Warning | Missing `//@version=6` |
+| W003 | Warning | `lookahead_on` without justification |
+| W004 | Warning | High `max_bars_back` value |
+| W005 | Warning | Potentially unused variable |
+
+## Performance
+
+The HTTP server (Fly.io) uses response caching with 1-hour TTL for documentation lookups, making repeated queries very fast.
 
 ## Development
 
