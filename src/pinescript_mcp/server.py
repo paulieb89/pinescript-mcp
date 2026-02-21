@@ -387,7 +387,10 @@ def _validate_path(path: str) -> Path:
     return full_path
 
 
-@mcp.tool(tags={"reference", "discovery"})
+@mcp.tool(
+    tags={"reference", "discovery"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def list_docs(ctx: Context) -> str:
     """List all available Pine Script v6 documentation files with descriptions.
 
@@ -439,7 +442,10 @@ async def list_docs(ctx: Context) -> str:
     return result
 
 
-@mcp.tool(tags={"reference"})
+@mcp.tool(
+    tags={"reference"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> str:
     """Read a specific Pine Script v6 documentation file.
 
@@ -494,7 +500,10 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
         return f"Error: {e}"
 
 
-@mcp.tool(tags={"reference"})
+@mcp.tool(
+    tags={"reference"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def get_section(path: str, header: str, ctx: Context, include_children: bool = True) -> str:
     """Get a specific section from a documentation file by its header.
 
@@ -544,7 +553,10 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
         return f"Error: {e}"
 
 
-@mcp.tool(tags={"search"})
+@mcp.tool(
+    tags={"search"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     """Grep for an exact string across all Pine Script v6 documentation.
 
@@ -608,7 +620,10 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     return result
 
 
-@mcp.tool(tags={"reference", "discovery"})
+@mcp.tool(
+    tags={"reference", "discovery"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def get_manifest(ctx: Context) -> str:
     """Get the LLM_MANIFEST.md file which provides routing guidance for Pine Script topics.
 
@@ -634,7 +649,10 @@ async def get_manifest(ctx: Context) -> str:
     return result
 
 
-@mcp.tool(tags={"reference", "validation"})
+@mcp.tool(
+    tags={"reference", "validation"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def get_functions(ctx: Context, namespace: str = "") -> str:
     """Get valid Pine Script v6 functions, optionally filtered by namespace.
 
@@ -685,7 +703,10 @@ async def get_functions(ctx: Context, namespace: str = "") -> str:
     return result
 
 
-@mcp.tool(tags={"validation"})
+@mcp.tool(
+    tags={"validation"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
     """Check if a Pine Script v6 function name is valid.
 
@@ -743,7 +764,10 @@ async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
     return result
 
 
-@mcp.tool(tags={"search", "entry"})
+@mcp.tool(
+    tags={"search", "entry"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
     """Find the right documentation for a Pine Script question or concept.
 
@@ -1015,7 +1039,10 @@ def _lint_pine(code: str) -> list[dict]:
     return issues
 
 
-@mcp.tool(tags={"validation"})
+@mcp.tool(
+    tags={"validation"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
 async def lint_script(script: str, ctx: Context) -> LintResult:
     """Lint Pine Script for syntax and style issues (free, no API cost).
 
