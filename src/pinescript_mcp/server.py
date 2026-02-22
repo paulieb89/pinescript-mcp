@@ -497,6 +497,9 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
 
         # Apply offset and limit if specified
         if limit > 0:
+            # Validate offset is within bounds
+            if offset >= total:
+                return f"Error: offset {offset} exceeds file size ({total} chars). Use offset < {total}."
             end = min(offset + limit, total)
             content = content[offset:end]
             has_more = end < total
@@ -752,8 +755,11 @@ async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
 
     fn_name = fn_name.strip()
 
+    # Handle empty input
+    if not fn_name:
+        result = ValidationResult(valid=False, type=None, function="", suggestion="Provide a function name to validate")
     # Check namespaced functions
-    if fn_name in PINE_V6_FUNCTIONS:
+    elif fn_name in PINE_V6_FUNCTIONS:
         result = ValidationResult(valid=True, type="namespaced", function=fn_name)
     # Check top-level functions
     elif fn_name in PINE_V6_TOPLEVEL:
@@ -944,7 +950,11 @@ def _lint_pine(code: str) -> list[dict]:
         # --- Rule E007: alertcondition() in strategy ---
         if re.search(r'\balertcondition\s*\(', stripped):
             for prev_line in lines[:i]:
-                if re.search(r'\bstrategy\s*\(', prev_line):
+                # Skip comment lines when checking for strategy declaration
+                prev_stripped = prev_line.strip()
+                if prev_stripped.startswith("//"):
+                    continue
+                if re.search(r'\bstrategy\s*\(', prev_stripped):
                     issues.append({
                         "line": i,
                         "rule": "E007_alertcondition_in_strategy",
@@ -988,15 +998,6 @@ def _lint_pine(code: str) -> list[dict]:
                     "message": f"'{fn_name}()' does not exist in Pine Script v6.",
                     "severity": "error"
                 })
-
-        # --- Rule W001: Missing //@version=6 ---
-        if i == 1 and not stripped.startswith("//@version="):
-            issues.append({
-                "line": 1,
-                "rule": "W001_missing_version",
-                "message": "Missing //@version=6 declaration on line 1.",
-                "severity": "warning"
-            })
 
         # --- Rule W003: lookahead_on without comment/justification ---
         if re.search(r'lookahead\s*=\s*barmerge\.lookahead_on', stripped):
@@ -1067,6 +1068,26 @@ def _lint_pine(code: str) -> list[dict]:
                     "message": f"Variable '{var_name}' is declared but may be unused. Verify it's referenced elsewhere.",
                     "severity": "warning"
                 })
+
+    # --- Rule W001: Missing //@version=6 (check first non-comment line) ---
+    version_found = False
+    for line in lines:
+        stripped_line = line.strip()
+        # Skip empty lines and regular comments (but not annotations like //@)
+        if not stripped_line or (stripped_line.startswith("//") and not stripped_line.startswith("//@")):
+            continue
+        # Check if this first significant line is a version declaration
+        if stripped_line.startswith("//@version="):
+            version_found = True
+        break  # Only check the first significant line
+
+    if not version_found:
+        issues.insert(0, {
+            "line": 1,
+            "rule": "W001_missing_version",
+            "message": "Missing //@version=6 declaration. Add it as the first non-comment line.",
+            "severity": "warning"
+        })
 
     return issues
 

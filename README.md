@@ -77,7 +77,7 @@ Documentation is bundled in the package - each version contains a frozen snapsho
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.5.1"]
+      "args": ["pinescript-mcp==0.5.2"]
     }
   }
 }
@@ -90,7 +90,7 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 If you prefer pip over uvx:
 
 ```bash
-pip install pinescript-mcp==0.5.1
+pip install pinescript-mcp==0.5.2
 ```
 
 Note: `"command": "pinescript-mcp"` only works if the install location is in your PATH. The `uvx` method above is more reliable as it handles environments automatically.
@@ -158,12 +158,14 @@ AI models often hallucinate Pine Script functions or use deprecated v5 syntax. T
 - Incorrect parameter orders
 - Missing required arguments
 
-## Lint Rules (15 total)
+## Lint Rules (17 total)
 
 The `lint_script` tool checks for common Pine Script issues without using AI:
 
 | Rule | Type | Description |
 |------|------|-------------|
+| S000 | Warning | AST parser failed (graceful fallback) |
+| S001 | Error | Real syntax errors (via pynescript AST parser) |
 | E001 | Error | `input.enum()` with const string constants |
 | E003 | Error | Return type keyword on function declaration |
 | E005 | Error | `study()` → use `indicator()` |
