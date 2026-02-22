@@ -23,6 +23,14 @@ import os
 
 from pinescript_mcp import __version__
 
+# Optional: pynescript for AST-based syntax validation
+try:
+    from pynescript.ast import parse as pine_parse
+    from pynescript.ast.error import SyntaxError as PineSyntaxError
+    HAS_PYNESCRIPT = True
+except ImportError:
+    HAS_PYNESCRIPT = False
+
 
 # ---------------------------------------------------------------------------
 # Pydantic Models for Structured Output
@@ -34,6 +42,7 @@ class LintIssue(BaseModel):
     rule: str
     message: str
     severity: Literal["error", "warning"]
+    column: int | None = None  # Optional: column for syntax errors
 
 
 class LintResult(BaseModel):
@@ -891,6 +900,43 @@ CONST_STRING_NAMESPACES = {
 }
 
 
+def _lint_syntax(code: str) -> list[dict]:
+    """
+    Parse Pine Script into AST to detect syntax errors.
+
+    Uses pynescript library for real syntax validation.
+    Returns empty list if no errors found.
+    """
+    if not HAS_PYNESCRIPT:
+        return []
+
+    try:
+        pine_parse(code)
+        return []  # No syntax errors
+    except PineSyntaxError as e:
+        # pynescript SyntaxError stores details in e.details (NamedTuple)
+        line = e.details.lineno if hasattr(e, 'details') else 1
+        col = e.details.offset if hasattr(e, 'details') else None
+        msg = e.message if hasattr(e, 'message') else str(e)
+        issue = {
+            "line": line,
+            "rule": "S001_syntax_error",
+            "message": f"Syntax error: {msg}",
+            "severity": "error",
+        }
+        if col is not None:
+            issue["column"] = col
+        return [issue]
+    except Exception as e:
+        # Graceful fallback for unexpected parser errors
+        return [{
+            "line": 1,
+            "rule": "S000_parse_failed",
+            "message": f"AST parser failed: {str(e)[:100]}",
+            "severity": "warning",
+        }]
+
+
 def _lint_pine(code: str) -> list[dict]:
     """
     Lint Pine Script v6 code and return a list of issues.
@@ -1109,7 +1155,12 @@ async def lint_script(script: str, ctx: Context) -> LintResult:
     """
     start = time.time()
 
-    raw_issues = _lint_pine(script)
+    # Run syntax check first (AST-based, catches real errors)
+    syntax_issues = _lint_syntax(script)
+    # Then run regex-based pattern checks
+    pattern_issues = _lint_pine(script)
+    # Combine: syntax errors first, then pattern issues
+    raw_issues = syntax_issues + pattern_issues
     issues = [LintIssue(**issue) for issue in raw_issues]
 
     result = LintResult(
