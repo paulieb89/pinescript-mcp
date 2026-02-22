@@ -97,7 +97,7 @@ This updates:
 uv build
 
 # Publish (requires API token)
-uvx twine upload dist/*
+uvx twine upload --config-file .pypirc dist/*
 ```
 
 ## Deploying to Fly.io
