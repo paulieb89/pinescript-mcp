@@ -4,4 +4,4 @@ Provides tools to list, search, and read Pine Script v6 documentation
 for use with AI assistants like Claude.
 """
 
-__version__ = "0.5.2"
+__version__ = "0.6.0"
