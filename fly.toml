@@ -28,3 +28,7 @@ primary_region = 'sjc'
   cpu_kind = 'shared'
   cpus = 1
   memory_mb = 256
+
+[metrics]
+  port = 8080
+  path = "/metrics"

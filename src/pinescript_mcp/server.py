@@ -21,7 +21,34 @@ from pydantic import BaseModel
 import time
 import os
 
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
+
 from pinescript_mcp import __version__
+
+# ---------------------------------------------------------------------------
+# Prometheus Metrics (scraped by Fly.io → fly-metrics.net Grafana)
+# ---------------------------------------------------------------------------
+METRICS_REGISTRY = CollectorRegistry()
+
+tool_calls_total = Counter(
+    "pinescript_tool_calls_total",
+    "Total MCP tool calls",
+    ["tool"],
+    registry=METRICS_REGISTRY,
+)
+tool_errors_total = Counter(
+    "pinescript_tool_errors_total",
+    "Tool calls that raised exceptions",
+    ["tool"],
+    registry=METRICS_REGISTRY,
+)
+tool_duration_seconds = Histogram(
+    "pinescript_tool_duration_seconds",
+    "Tool call duration in seconds",
+    ["tool"],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+    registry=METRICS_REGISTRY,
+)
 
 # Optional: pynescript for AST-based syntax validation
 try:
@@ -133,12 +160,17 @@ class _timed_tool:
         return self._data
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.time() - self._start
+        tool_calls_total.labels(tool=self._tool_name).inc()
+        tool_duration_seconds.labels(tool=self._tool_name).observe(duration)
+        if exc_type is not None:
+            tool_errors_total.labels(tool=self._tool_name).inc()
         log_data = {
             "event": "tool_call",
             "tool": self._tool_name,
             **self._extra,
             **self._data,
-            "duration_ms": int((time.time() - self._start) * 1000),
+            "duration_ms": int(duration * 1000),
         }
         _logger.info(json.dumps(log_data))
         return False
@@ -1099,6 +1131,13 @@ async def health_check(request):
     """Health check endpoint for container orchestration."""
     from starlette.responses import JSONResponse
     return JSONResponse({"status": "healthy", "server": "pinescript-docs", "version": __version__})
+
+
+@mcp.custom_route("/metrics", methods=["GET"])
+async def metrics(request):
+    """Prometheus metrics endpoint for Fly.io scraping."""
+    from starlette.responses import Response
+    return Response(generate_latest(METRICS_REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
 def main():
