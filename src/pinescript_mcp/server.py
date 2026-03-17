@@ -1160,12 +1160,17 @@ def main():
 
     parser = argparse.ArgumentParser(description="Pine Script v6 MCP Server")
     parser.add_argument("--http", action="store_true", help="Run as HTTP server")
-    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 8000)),
-                        help="HTTP port (default: 8000 or $PORT)")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 8080)),
+                        help="HTTP port (default: 8080 or $PORT)")
     parser.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
     args = parser.parse_args()
 
     if args.http:
+        from fastmcp.server.transforms.search import BM25SearchTransform
+        mcp.add_transform(BM25SearchTransform(
+            max_results=10,
+            always_visible=["get_manifest", "lint_script"],
+        ))
         mcp.run(transport="http", host=args.host, port=args.port)
     else:
         mcp.run()
