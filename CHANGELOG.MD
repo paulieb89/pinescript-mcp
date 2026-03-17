@@ -2,6 +2,35 @@
 
 ## v0.5.0 → v0.6.0 Changelog
 
+
+Bugs fixed
+
+Duplicate "method" key — keywords.md entry renamed to "method keyword"
+publishing_scripts.md dead reference removed from DOCS and TOPIC_MAP
+"for" matching "format" — whole-word matching for single-word keywords
+
+Routing improvements
+
+17 new visual TOPIC_MAP entries (all 11 visual docs now reachable)
+String/format entries: "format", "str.format", "format string", "number format", "str.tostring", "string format"
+DOC_COMPANIONS trimmed — RSI no longer suggests drawing.md
+Fuzzy fallback tightened (5-char min, 4-char prefix)
+read_with companion hints on TopicMatch
+LARGE_DOCS routing in resolve_topic suggestions
+
+New tools / content
+
+list_sections (10th tool, cached)
+reference/migration_v5_to_v6.md + 8 TOPIC_MAP entries
+Full LLM_MANIFEST.md rewrite with tool workflow section and 7 routing examples
+
+Code quality
+
+_timed_tool context manager — ~100 lines of boilerplate replaced, all 9 tools now log errors consistently
+Importlib dead branches collapsed, sys import removed
+All ctx.info() noise removed
+_logger via get_logger — tool calls now visible in Fly logs
+
 ### v0.5.0 → v0.5.1 
 
 ### MCP Annotations

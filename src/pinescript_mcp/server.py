@@ -7,7 +7,6 @@ Provides tools to list, search, and read Pine Script v6 documentation.
 
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Literal
 
@@ -115,25 +114,40 @@ mcp.add_middleware(ResponseCachingMiddleware(
 _logger = get_logger("pinescript_mcp.tools")
 
 
-def _log_tool_call(data: dict) -> None:
-    """Log tool call via FastMCP logger."""
-    _logger.info(json.dumps(data))
+class _timed_tool:
+    """Context manager for tool timing and logging.
+
+    Usage:
+        with _timed_tool("get_doc", path=path) as log:
+            ...
+            log["chars"] = len(content)  # add extra fields
+    """
+    def __init__(self, tool_name: str, **kwargs):
+        self._tool_name = tool_name
+        self._extra = kwargs
+        self._data: dict = {}
+
+    def __enter__(self):
+        self._start = time.time()
+        self._data = {}
+        return self._data
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        log_data = {
+            "event": "tool_call",
+            "tool": self._tool_name,
+            **self._extra,
+            **self._data,
+            "duration_ms": int((time.time() - self._start) * 1000),
+        }
+        _logger.info(json.dumps(log_data))
+        return False
 
 # Path resolution - support both installed package and development
-# For Python 3.10+, use importlib.resources
 try:
-    if sys.version_info >= (3, 11):
-        from importlib.resources import files
-        _pkg_files = files("pinescript_mcp")
-        DOCS_ROOT = Path(str(_pkg_files.joinpath("docs")))
-    else:
-        # Python 3.10 fallback
-        from importlib.resources import files
-        import importlib.resources as pkg_resources
-        _pkg_files = files("pinescript_mcp")
-        DOCS_ROOT = Path(str(_pkg_files.joinpath("docs")))
+    from importlib.resources import files
+    DOCS_ROOT = Path(str(files("pinescript_mcp").joinpath("docs")))
 except (ImportError, TypeError, ModuleNotFoundError):
-    # Fallback for development mode
     DOCS_ROOT = Path(__file__).parent / "docs"
 
 # Allowed directories for reading docs
@@ -153,10 +167,8 @@ LARGE_DOCS = {
 
 # Known doc combinations — companion docs to read alongside a match
 DOC_COMPANIONS = {
-    "reference/functions/ta.md": ["reference/functions/drawing.md"],
     "reference/functions/strategy.md": ["concepts/execution_model.md"],
     "reference/functions/request.md": ["concepts/timeframes.md"],
-    "reference/functions/drawing.md": ["reference/functions/ta.md"],
 }
 
 
@@ -330,7 +342,7 @@ TOPIC_MAP = {
     "switch": "reference/keywords.md",
     "import": "reference/keywords.md",
     "export": "reference/keywords.md",
-    "method": "reference/keywords.md",
+    "method keyword": "reference/keywords.md",
     # Libraries & Annotations
     "library": "reference/annotations.md",
     "libraries": "reference/annotations.md",
@@ -401,6 +413,14 @@ TOPIC_MAP = {
     "deprecated": "reference/migration_v5_to_v6.md",
     "upgrade": "reference/migration_v5_to_v6.md",
     "convert v5": "reference/migration_v5_to_v6.md",
+    # String formatting
+    "str.format": "reference/functions/general.md",
+    "str.tostring": "reference/functions/general.md",
+    "format": "reference/functions/general.md",
+    "tostring": "reference/functions/general.md",
+    "format string": "reference/functions/general.md",
+    "number format": "reference/functions/general.md",
+    "string format": "reference/functions/general.md",
 }
 
 
@@ -485,49 +505,37 @@ async def list_docs(ctx: Context) -> str:
     Returns a formatted list of documentation files organized by category.
     Use get_doc(path) to read a specific file.
     """
-    start = time.time()
+    with _timed_tool("list_docs"):
+        output = ["# Pine Script v6 Documentation", ""]
 
-    output = ["# Pine Script v6 Documentation", ""]
+        categories = {
+            "Concepts": [],
+            "Reference": [],
+            "Functions": [],
+            "Visuals": [],
+            "Writing Scripts": [],
+        }
 
-    # Group by category (ordered dict to preserve display order)
-    categories = {
-        "Concepts": [],
-        "Reference": [],
-        "Functions": [],
-        "Visuals": [],
-        "Writing Scripts": [],
-    }
+        for path, desc in DOCS.items():
+            if path.startswith("concepts/"):
+                categories["Concepts"].append((path, desc))
+            elif path.startswith("reference/functions/"):
+                categories["Functions"].append((path, desc))
+            elif path.startswith("reference/"):
+                categories["Reference"].append((path, desc))
+            elif path.startswith("visuals/"):
+                categories["Visuals"].append((path, desc))
+            elif path.startswith("writing_scripts/"):
+                categories["Writing Scripts"].append((path, desc))
 
-    for path, desc in DOCS.items():
-        if path.startswith("concepts/"):
-            categories["Concepts"].append((path, desc))
-        elif path.startswith("reference/functions/"):
-            categories["Functions"].append((path, desc))
-        elif path.startswith("reference/"):
-            categories["Reference"].append((path, desc))
-        elif path.startswith("visuals/"):
-            categories["Visuals"].append((path, desc))
-        elif path.startswith("writing_scripts/"):
-            categories["Writing Scripts"].append((path, desc))
+        for category, docs in categories.items():
+            if docs:
+                output.append(f"## {category}")
+                for path, desc in docs:
+                    output.append(f"- `{path}`: {desc}")
+                output.append("")
 
-    for category, docs in categories.items():
-        if docs:
-            output.append(f"## {category}")
-            for path, desc in docs:
-                output.append(f"- `{path}`: {desc}")
-            output.append("")
-
-    result = "\n".join(output)
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "list_docs",
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+        return "\n".join(output)
 
 
 @mcp.tool(
@@ -545,34 +553,16 @@ async def list_sections(path: str, ctx: Context) -> str:
 
     Returns section headers with their levels (##, ###).
     """
-    start = time.time()
-
-    try:
-        full_path = _validate_path(path)
-        content = full_path.read_text(encoding="utf-8")
-        headers = [line for line in content.splitlines() if line.startswith("#")]
-        result = "\n".join(headers)
-
-        log_data = {
-            "event": "tool_call",
-            "tool": "list_sections",
-            "path": path,
-            "headers_found": len(headers),
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-
-        return result
-    except ValueError as e:
-        log_data = {
-            "event": "tool_call",
-            "tool": "list_sections",
-            "path": path,
-            "error": str(e),
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-        return f"Error: {e}"
+    with _timed_tool("list_sections", path=path) as log:
+        try:
+            full_path = _validate_path(path)
+            content = full_path.read_text(encoding="utf-8")
+            headers = [line for line in content.splitlines() if line.startswith("#")]
+            log["headers_found"] = len(headers)
+            return "\n".join(headers)
+        except ValueError as e:
+            log["error"] = str(e)
+            return f"Error: {e}"
 
 
 @mcp.tool(
@@ -589,51 +579,27 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
 
     Returns the contents with metadata header showing total size and current slice.
     """
-    start = time.time()
+    with _timed_tool("get_doc", path=path, limit=limit, offset=offset) as log:
+        try:
+            full_path = _validate_path(path)
+            content = full_path.read_text(encoding="utf-8")
+            total = len(content)
 
-    try:
-        full_path = _validate_path(path)
-        content = full_path.read_text(encoding="utf-8")
-        total = len(content)
-
-        # Apply offset and limit if specified
-        if limit > 0:
-            # Validate offset is within bounds
-            if offset >= total:
-                return f"Error: offset {offset} exceeds file size ({total} chars). Use offset < {total}."
-            end = min(offset + limit, total)
-            content = content[offset:end]
-            has_more = end < total
-            header = f"# {path} (chars {offset}-{end} of {total})\n"
-            if has_more:
-                header += f"# Use offset={end} to continue reading\n"
-            result = header + "\n" + content
-        else:
-            result = content
-
-        log_data = {
-            "event": "tool_call",
-            "tool": "get_doc",
-            "path": path,
-            "limit": limit,
-            "offset": offset,
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-    
-
-        return result
-    except ValueError as e:
-        log_data = {
-            "event": "tool_call",
-            "tool": "get_doc",
-            "path": path,
-            "error": str(e),
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-    
-        return f"Error: {e}"
+            if limit > 0:
+                if offset >= total:
+                    return f"Error: offset {offset} exceeds file size ({total} chars). Use offset < {total}."
+                end = min(offset + limit, total)
+                content = content[offset:end]
+                has_more = end < total
+                header = f"# {path} (chars {offset}-{end} of {total})\n"
+                if has_more:
+                    header += f"# Use offset={end} to continue reading\n"
+                return header + "\n" + content
+            else:
+                return content
+        except ValueError as e:
+            log["error"] = str(e)
+            return f"Error: {e}"
 
 
 @mcp.tool(
@@ -652,41 +618,15 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
 
     Returns the section content from the header to the next same-level header.
     """
-    start = time.time()
-
-    try:
-        full_path = _validate_path(path)
-        content = full_path.read_text(encoding="utf-8")
-
-        section, start_line, end_line = _find_section(content, header, include_children)
-
-        header_info = f"# {path} (lines {start_line}-{end_line})\n\n"
-        result = header_info + section
-
-        log_data = {
-            "event": "tool_call",
-            "tool": "get_section",
-            "path": path,
-            "header": header,
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-    
-
-        return result
-
-    except ValueError as e:
-        log_data = {
-            "event": "tool_call",
-            "tool": "get_section",
-            "path": path,
-            "header": header,
-            "error": str(e),
-            "duration_ms": int((time.time() - start) * 1000)
-        }
-        _log_tool_call(log_data)
-    
-        return f"Error: {e}"
+    with _timed_tool("get_section", path=path, header=header) as log:
+        try:
+            full_path = _validate_path(path)
+            content = full_path.read_text(encoding="utf-8")
+            section, start_line, end_line = _find_section(content, header, include_children)
+            return f"# {path} (lines {start_line}-{end_line})\n\n{section}"
+        except ValueError as e:
+            log["error"] = str(e)
+            return f"Error: {e}"
 
 
 @mcp.tool(
@@ -705,55 +645,40 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
 
     Returns matching lines with file paths and line numbers.
     """
-    start = time.time()
+    with _timed_tool("search_docs", query=query, max_results=max_results) as log:
+        all_results = []
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
 
-    all_results = []
-    pattern = re.compile(re.escape(query), re.IGNORECASE)
+        for rel_path in DOCS.keys():
+            full_path = DOCS_ROOT / rel_path
+            if not full_path.exists():
+                continue
+            try:
+                lines = full_path.read_text(encoding="utf-8").splitlines()
+                for i, line in enumerate(lines, 1):
+                    if pattern.search(line):
+                        all_results.append({
+                            "file": rel_path,
+                            "line": i,
+                            "content": line.strip()[:200],
+                            "is_header": 1 if line.strip().startswith("#") else 0
+                        })
+            except Exception:
+                continue
 
-    for rel_path in DOCS.keys():
-        full_path = DOCS_ROOT / rel_path
-        if not full_path.exists():
-            continue
+        all_results.sort(key=lambda r: (-r["is_header"], r["file"], r["line"]))
+        results = all_results[:max_results]
+        log["results_found"] = len(results)
 
-        try:
-            lines = full_path.read_text(encoding="utf-8").splitlines()
-            for i, line in enumerate(lines, 1):
-                if pattern.search(line):
-                    all_results.append({
-                        "file": rel_path,
-                        "line": i,
-                        "content": line.strip()[:200],
-                        "is_header": 1 if line.strip().startswith("#") else 0
-                    })
-        except Exception:
-            continue
+        if not results:
+            return f"No results found for: {query}"
 
-    # Sort: headers first (more useful context), then by file/line for stability
-    all_results.sort(key=lambda r: (-r["is_header"], r["file"], r["line"]))
-    results = all_results[:max_results]
-
-    if not results:
-        result = f"No results found for: {query}"
-    else:
         output = [f"# Search results for: {query}", f"Found {len(results)} matches", ""]
         for r in results:
             output.append(f"**{r['file']}:{r['line']}**")
             output.append(f"  {r['content']}")
             output.append("")
-        result = "\n".join(output)
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "search_docs",
-        "query": query,
-        "max_results": max_results,
-        "results_found": len(results),
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+        return "\n".join(output)
 
 
 @mcp.tool(
@@ -766,23 +691,11 @@ async def get_manifest(ctx: Context) -> str:
     This manifest maps topics to specific documentation files and includes
     routing logic examples for common queries.
     """
-    start = time.time()
-
-    manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
-    if manifest_path.exists():
-        result = manifest_path.read_text(encoding="utf-8")
-    else:
-        result = "Error: LLM_MANIFEST.md not found"
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "get_manifest",
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+    with _timed_tool("get_manifest"):
+        manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
+        if manifest_path.exists():
+            return manifest_path.read_text(encoding="utf-8")
+        return "Error: LLM_MANIFEST.md not found"
 
 
 @mcp.tool(
@@ -799,44 +712,27 @@ async def get_functions(ctx: Context, namespace: str = "") -> str:
     Returns formatted list of functions. External agents can use this
     to ground their Pine Script generation and avoid hallucinated functions.
     """
-    start = time.time()
+    with _timed_tool("get_functions", namespace=namespace or "(all)"):
+        if not PINE_V6_FUNCTIONS:
+            return (
+                "Error: Function data not loaded. "
+                "The pine_v6_functions.json file may be missing from the package."
+            )
+        if not namespace:
+            by_ns: dict[str, list[str]] = {}
+            for fn in sorted(PINE_V6_FUNCTIONS):
+                ns, _, name = fn.rpartition(".")
+                by_ns.setdefault(ns, []).append(name)
+            lines = [f"{ns}.*: {', '.join(sorted(fns))}" for ns, fns in sorted(by_ns.items())]
+            lines.append(f"Top-level: {', '.join(sorted(PINE_V6_TOPLEVEL))}")
+            return "\n".join(lines)
 
-    if not PINE_V6_FUNCTIONS:
-        result = (
-            "Error: Function data not loaded. "
-            "The pine_v6_functions.json file may be missing from the package."
-        )
-    elif not namespace:
-        # Build compact grouped format
-        by_ns: dict[str, list[str]] = {}
-        for fn in sorted(PINE_V6_FUNCTIONS):
-            ns, _, name = fn.rpartition(".")
-            by_ns.setdefault(ns, []).append(name)
-
-        lines = [f"{ns}.*: {', '.join(sorted(fns))}" for ns, fns in sorted(by_ns.items())]
-        lines.append(f"Top-level: {', '.join(sorted(PINE_V6_TOPLEVEL))}")
-        result = "\n".join(lines)
-    else:
-        # Filter by namespace
         prefix = f"{namespace}."
         matches = sorted(fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix))
-
         if not matches:
             available = ", ".join(sorted(PINE_V6_NAMESPACES))
-            result = f"No functions found for namespace '{namespace}'. Available namespaces: {available}"
-        else:
-            result = f"# {namespace}.* functions ({len(matches)} total)\n\n" + "\n".join(f"- {fn}" for fn in matches)
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "get_functions",
-        "namespace": namespace or "(all)",
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+            return f"No functions found for namespace '{namespace}'. Available namespaces: {available}"
+        return f"# {namespace}.* functions ({len(matches)} total)\n\n" + "\n".join(f"- {fn}" for fn in matches)
 
 
 @mcp.tool(
@@ -852,55 +748,34 @@ async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
     Returns:
         ValidationResult with valid status, type, and suggestion if invalid.
     """
-    start = time.time()
+    with _timed_tool("validate_function", fn_name=fn_name):
+        fn_name = fn_name.strip()
 
-    fn_name = fn_name.strip()
+        if not fn_name:
+            return ValidationResult(valid=False, type=None, function="", suggestion="Provide a function name to validate")
+        if fn_name in PINE_V6_FUNCTIONS:
+            return ValidationResult(valid=True, type="namespaced", function=fn_name)
+        if fn_name in PINE_V6_TOPLEVEL:
+            return ValidationResult(valid=True, type="toplevel", function=fn_name)
 
-    # Handle empty input
-    if not fn_name:
-        result = ValidationResult(valid=False, type=None, function="", suggestion="Provide a function name to validate")
-    # Check namespaced functions
-    elif fn_name in PINE_V6_FUNCTIONS:
-        result = ValidationResult(valid=True, type="namespaced", function=fn_name)
-    # Check top-level functions
-    elif fn_name in PINE_V6_TOPLEVEL:
-        result = ValidationResult(valid=True, type="toplevel", function=fn_name)
-    else:
-        # Not found - try to find a suggestion
         suggestion = None
-
-        # Check if it's a namespace prefix typo (e.g., "ta.smaa" -> "ta.sma")
         if "." in fn_name:
             ns, _, _name = fn_name.rpartition(".")
             prefix = f"{ns}."
             candidates = [fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix)]
-            # Simple prefix match for suggestion
             for candidate in candidates:
                 if candidate.startswith(fn_name[:len(fn_name)-1]):
                     suggestion = candidate
                     break
-            # If no prefix match, just show the namespace exists
             if not suggestion and candidates:
                 suggestion = f"namespace '{ns}' exists with {len(candidates)} functions"
         else:
-            # Check top-level for partial match
             for fn in PINE_V6_TOPLEVEL:
                 if fn.startswith(fn_name[:max(1, len(fn_name)-1)]):
                     suggestion = fn
                     break
 
-        result = ValidationResult(valid=False, type=None, function=fn_name, suggestion=suggestion)
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "validate_function",
-        "fn_name": fn_name,
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+        return ValidationResult(valid=False, type=None, function=fn_name, suggestion=suggestion)
 
 
 @mcp.tool(
@@ -920,50 +795,45 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
         ResolveResult with matched documentation paths ranked by relevance.
         Use get_doc(path) to read the recommended files.
     """
-    start = time.time()
+    with _timed_tool("resolve_topic", query=query) as log:
+        query_lower = query.lower()
 
-    query_lower = query.lower()
+        path_scores: dict[str, list[str]] = {}
+        query_words = set(query_lower.split())
 
-    # Count matches per path
-    path_scores: dict[str, list[str]] = {}
-    query_words = set(query_lower.split())
-
-    for keyword, path in TOPIC_MAP.items():
-        # Multi-word keywords: check substring match (e.g. "trailing stop" in query)
-        # Single-word keywords: require whole-word match to avoid "for" matching "format"
-        if " " in keyword:
-            matched = keyword in query_lower
-        else:
-            matched = keyword in query_words
-        if matched:
-            if path not in path_scores:
-                path_scores[path] = []
-            path_scores[path].append(keyword)
-
-    if not path_scores:
-        # No exact matches - try partial matching (strict: 5+ chars, 4-char prefix)
         for keyword, path in TOPIC_MAP.items():
-            for word in query_lower.split():
-                if len(word) >= 5 and len(keyword) >= 5 and (
-                    word.startswith(keyword[:4]) or keyword.startswith(word[:4])
-                ):
-                    if path not in path_scores:
-                        path_scores[path] = []
-                    path_scores[path].append(f"~{keyword}")
-                    break
+            if " " in keyword:
+                matched = keyword in query_lower
+            else:
+                matched = keyword in query_words
+            if matched:
+                if path not in path_scores:
+                    path_scores[path] = []
+                path_scores[path].append(keyword)
 
-    if not path_scores:
-        result = ResolveResult(
-            matches=[],
-            query=query,
-            suggestion="Try search_docs(query) for full-text search"
-        )
-    else:
-        # Sort by number of keyword matches (most relevant first)
+        if not path_scores:
+            for keyword, path in TOPIC_MAP.items():
+                for word in query_lower.split():
+                    if len(word) >= 5 and len(keyword) >= 5 and (
+                        word.startswith(keyword[:4]) or keyword.startswith(word[:4])
+                    ):
+                        if path not in path_scores:
+                            path_scores[path] = []
+                        path_scores[path].append(f"~{keyword}")
+                        break
+
+        log["matches_found"] = len(path_scores)
+
+        if not path_scores:
+            return ResolveResult(
+                matches=[],
+                query=query,
+                suggestion="Try search_docs(query) for full-text search"
+            )
+
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
 
-        # Build matches with companion doc hints
-        existing_paths = {path for path in path_scores.keys()}
+        existing_paths = set(path_scores.keys())
         matches = []
         for path, keywords in ranked:
             companions = DOC_COMPANIONS.get(path, [])
@@ -975,7 +845,6 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
                 read_with=filtered_companions,
             ))
 
-        # Build smart suggestion based on top match
         top_path = matches[0].path
         if top_path in LARGE_DOCS:
             suggestion = f"Large file — use list_sections('{top_path}') to find headers, then get_section() to read specific sections."
@@ -985,23 +854,11 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
         else:
             suggestion = f"Use get_doc('{top_path}') to read the top match"
 
-        result = ResolveResult(
+        return ResolveResult(
             matches=matches,
             query=query,
             suggestion=suggestion
         )
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "resolve_topic",
-        "query": query,
-        "matches_found": len(path_scores),
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1271,33 +1128,18 @@ async def lint_script(script: str, ctx: Context) -> LintResult:
     Returns:
         LintResult with status, count, and list of issues found.
     """
-    start = time.time()
+    with _timed_tool("lint_script", script_length=len(script)) as log:
+        syntax_issues = _lint_syntax(script)
+        pattern_issues = _lint_pine(script)
+        raw_issues = syntax_issues + pattern_issues
+        issues = [LintIssue(**issue) for issue in raw_issues]
+        log["issues_found"] = len(issues)
 
-    # Run syntax check first (AST-based, catches real errors)
-    syntax_issues = _lint_syntax(script)
-    # Then run regex-based pattern checks
-    pattern_issues = _lint_pine(script)
-    # Combine: syntax errors first, then pattern issues
-    raw_issues = syntax_issues + pattern_issues
-    issues = [LintIssue(**issue) for issue in raw_issues]
-
-    result = LintResult(
-        status="ok" if not issues else "issues_found",
-        count=len(issues),
-        issues=issues
-    )
-
-    log_data = {
-        "event": "tool_call",
-        "tool": "lint_script",
-        "script_length": len(script),
-        "issues_found": len(issues),
-        "duration_ms": int((time.time() - start) * 1000)
-    }
-    _log_tool_call(log_data)
-
-
-    return result
+        return LintResult(
+            status="ok" if not issues else "issues_found",
+            count=len(issues),
+            issues=issues
+        )
 
 
 # ---------------------------------------------------------------------------
