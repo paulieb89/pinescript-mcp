@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from fastmcp import FastMCP, Context
+from fastmcp import FastMCP
 from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToolSettings
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
@@ -163,6 +163,7 @@ LARGE_DOCS = {
     "reference/functions/collections.md",
     "reference/functions/drawing.md",
     "reference/functions/general.md",
+    "concepts/execution_model.md",
 }
 
 # Known doc combinations — companion docs to read alongside a match
@@ -234,193 +235,66 @@ DOCS = {
     "reference/migration_v5_to_v6.md": "v5 to v6 migration guide, breaking changes, renamed functions",
 }
 
-# Topic mapping for resolve_topic() - keyword -> doc path
+# Topic mapping for resolve_topic() — exact Pine Script API terms only.
+# Natural language routing is handled by the LLM reading get_manifest().
 TOPIC_MAP = {
-    # Execution & State
-    "barstate": "concepts/execution_model.md",
-    "var": "concepts/execution_model.md",
-    "varip": "concepts/execution_model.md",
-    "history": "concepts/execution_model.md",
-    "realtime": "concepts/execution_model.md",
-    "calc_on_every_tick": "concepts/execution_model.md",
-    "execution model": "concepts/execution_model.md",
-    "bar-by-bar": "concepts/execution_model.md",
-    # Repainting & MTF
-    "repainting": "concepts/timeframes.md",
-    "repaint": "concepts/timeframes.md",
-    "lookahead": "concepts/timeframes.md",
+    # Technical Analysis — exact function prefixes
+    "ta.rsi": "reference/functions/ta.md",
+    "ta.sma": "reference/functions/ta.md",
+    "ta.ema": "reference/functions/ta.md",
+    "ta.macd": "reference/functions/ta.md",
+    "ta.crossover": "reference/functions/ta.md",
+    "ta.crossunder": "reference/functions/ta.md",
+    "ta.atr": "reference/functions/ta.md",
+    "ta.vwap": "reference/functions/ta.md",
+    "ta.supertrend": "reference/functions/ta.md",
+    "ta.stoch": "reference/functions/ta.md",
+    "ta.highest": "reference/functions/ta.md",
+    "ta.lowest": "reference/functions/ta.md",
+    "ta.pivothigh": "reference/functions/ta.md",
+    "ta.pivotlow": "reference/functions/ta.md",
+    "ta.bb": "reference/functions/ta.md",
+    # Strategy — exact function prefixes
+    "strategy.entry": "reference/functions/strategy.md",
+    "strategy.exit": "reference/functions/strategy.md",
+    "strategy.close": "reference/functions/strategy.md",
+    "strategy.position_size": "reference/functions/strategy.md",
+    "strategy.equity": "reference/functions/strategy.md",
+    "strategy.risk": "reference/functions/strategy.md",
+    # Request — exact function prefixes
     "request.security": "reference/functions/request.md",
-    "htf": "concepts/timeframes.md",
-    "multi-timeframe": "concepts/timeframes.md",
-    "mtf": "concepts/timeframes.md",
-    "timeframe": "concepts/timeframes.md",
-    "higher timeframe": "concepts/timeframes.md",
-    # Strategy
-    "backtest": "reference/functions/strategy.md",
-    "backtesting": "reference/functions/strategy.md",
-    "strategy": "reference/functions/strategy.md",
-    "entry": "reference/functions/strategy.md",
-    "exit": "reference/functions/strategy.md",
-    "trailing stop": "reference/functions/strategy.md",
-    "stop loss": "reference/functions/strategy.md",
-    "take profit": "reference/functions/strategy.md",
-    "position size": "reference/functions/strategy.md",
-    "order": "reference/functions/strategy.md",
-    "trade": "reference/functions/strategy.md",
-    "equity": "reference/functions/strategy.md",
-    "drawdown": "reference/functions/strategy.md",
-    "commission": "reference/functions/strategy.md",
-    "slippage": "reference/functions/strategy.md",
-    # Technical Analysis
-    "rsi": "reference/functions/ta.md",
-    "sma": "reference/functions/ta.md",
-    "ema": "reference/functions/ta.md",
-    "macd": "reference/functions/ta.md",
-    "crossover": "reference/functions/ta.md",
-    "crossunder": "reference/functions/ta.md",
-    "indicator": "reference/functions/ta.md",
-    "moving average": "reference/functions/ta.md",
-    "pivot": "reference/functions/ta.md",
-    "atr": "reference/functions/ta.md",
-    "bollinger": "reference/functions/ta.md",
-    "supertrend": "reference/functions/ta.md",
-    "stochastic": "reference/functions/ta.md",
-    "highest": "reference/functions/ta.md",
-    "lowest": "reference/functions/ta.md",
-    "vwap": "reference/functions/ta.md",
-    # Drawing & Visuals
-    "plot": "reference/functions/drawing.md",
-    "plotshape": "reference/functions/drawing.md",
-    "line": "reference/functions/drawing.md",
-    "box": "reference/functions/drawing.md",
-    "label": "reference/functions/drawing.md",
-    "table": "reference/functions/drawing.md",
-    "polyline": "reference/functions/drawing.md",
-    "fill": "reference/functions/drawing.md",
-    "hline": "reference/functions/drawing.md",
-    "color": "concepts/colors_and_display.md",
-    "bgcolor": "concepts/colors_and_display.md",
-    "gradient": "concepts/colors_and_display.md",
-    "transparency": "concepts/colors_and_display.md",
-    # Collections
-    "array": "reference/functions/collections.md",
-    "matrix": "reference/functions/collections.md",
-    "map": "reference/functions/collections.md",
-    # Errors
-    "error": "concepts/common_errors.md",
-    "max_bars_back": "concepts/common_errors.md",
-    "undeclared": "concepts/common_errors.md",
-    "compile error": "concepts/common_errors.md",
-    "runtime error": "concepts/common_errors.md",
-    # Types & Keywords
-    "type": "reference/types.md",
-    "series": "reference/types.md",
-    "simple": "reference/types.md",
-    "const": "reference/types.md",
-    "float": "reference/types.md",
-    "int": "reference/types.md",
-    "bool": "reference/types.md",
-    "string": "reference/types.md",
-    "input": "reference/functions/general.md",
-    "alert": "reference/functions/general.md",
-    "math": "reference/functions/general.md",
-    "str.": "reference/functions/general.md",
-    # Built-ins
-    "open": "reference/variables.md",
-    "close": "reference/variables.md",
-    "high": "reference/variables.md",
-    "low": "reference/variables.md",
-    "volume": "reference/variables.md",
-    "syminfo": "reference/variables.md",
-    "bar_index": "reference/variables.md",
-    "time": "reference/variables.md",
-    "ohlc": "reference/variables.md",
-    # Keywords
-    "if": "reference/keywords.md",
-    "for": "reference/keywords.md",
-    "while": "reference/keywords.md",
-    "switch": "reference/keywords.md",
-    "import": "reference/keywords.md",
-    "export": "reference/keywords.md",
-    "method keyword": "reference/keywords.md",
-    # Libraries & Annotations
-    "library": "reference/annotations.md",
-    "libraries": "reference/annotations.md",
-    "@description": "reference/annotations.md",
-    "@function": "reference/annotations.md",
-    "@param": "reference/annotations.md",
-    "@returns": "reference/annotations.md",
-    "annotation": "reference/annotations.md",
-    # Methods & Objects
-    "method": "concepts/methods.md",
-    "methods": "concepts/methods.md",
-    "udt": "concepts/objects.md",
-    "user-defined type": "concepts/objects.md",
-    "object": "concepts/objects.md",
-    "objects": "concepts/objects.md",
-    "type keyword": "concepts/objects.md",
-    # Operators
-    "operator": "reference/operators.md",
-    "operators": "reference/operators.md",
-    "ternary": "reference/operators.md",
-    "arithmetic": "reference/operators.md",
-    "comparison": "reference/operators.md",
-    "logical": "reference/operators.md",
-    # Visuals (detailed)
-    "plotcandle": "visuals/bar_plotting.md",
-    "plotbar": "visuals/bar_plotting.md",
-    "ohlc plot": "visuals/bar_plotting.md",
-    "custom candle": "visuals/bar_plotting.md",
-    "barcolor": "visuals/bar_coloring.md",
-    "bar color": "visuals/bar_coloring.md",
-    "color bars": "visuals/bar_coloring.md",
-    "candle color": "visuals/bar_coloring.md",
-    "linefill": "visuals/fills.md",
-    "fill between": "visuals/fills.md",
-    "plot fill": "visuals/fills.md",
-    "horizontal line": "visuals/levels.md",
-    "draw line": "visuals/lines_and_boxes.md",
-    "draw box": "visuals/lines_and_boxes.md",
-    "display table": "visuals/tables.md",
-    "data table": "visuals/tables.md",
-    "text label": "visuals/texts_and_shapes.md",
-    "shape marker": "visuals/texts_and_shapes.md",
-    "plotchar": "visuals/texts_and_shapes.md",
-    "background": "visuals/backgrounds.md",
-    "chart background": "visuals/backgrounds.md",
-    # Writing Scripts
-    "debug": "writing_scripts/debugging.md",
-    "debugging": "writing_scripts/debugging.md",
-    "log.info": "writing_scripts/debugging.md",
-    "log.warning": "writing_scripts/debugging.md",
-    "log.error": "writing_scripts/debugging.md",
-    "limitation": "writing_scripts/limitations.md",
-    "limitations": "writing_scripts/limitations.md",
-    "max bars": "writing_scripts/limitations.md",
-    "memory": "writing_scripts/limitations.md",
-    "optimization": "writing_scripts/profiling_and_optimization.md",
-    "profiling": "writing_scripts/profiling_and_optimization.md",
-    "performance": "writing_scripts/profiling_and_optimization.md",
-    "style guide": "writing_scripts/style_guide.md",
-    "naming convention": "writing_scripts/style_guide.md",
-    "best practice": "writing_scripts/style_guide.md",
-    # Migration
-    "v5 to v6": "reference/migration_v5_to_v6.md",
-    "migrate": "reference/migration_v5_to_v6.md",
-    "migration": "reference/migration_v5_to_v6.md",
-    "what changed": "reference/migration_v5_to_v6.md",
-    "breaking change": "reference/migration_v5_to_v6.md",
-    "deprecated": "reference/migration_v5_to_v6.md",
-    "upgrade": "reference/migration_v5_to_v6.md",
-    "convert v5": "reference/migration_v5_to_v6.md",
-    # String formatting
+    "request.financial": "reference/functions/request.md",
+    "request.currency_rate": "reference/functions/request.md",
+    # Drawing — exact function prefixes
+    "line.new": "reference/functions/drawing.md",
+    "box.new": "reference/functions/drawing.md",
+    "label.new": "reference/functions/drawing.md",
+    "polyline.new": "reference/functions/drawing.md",
+    "table.new": "reference/functions/drawing.md",
+    # Collections — exact function prefixes
+    "array.new": "reference/functions/collections.md",
+    "matrix.new": "reference/functions/collections.md",
+    "map.new": "reference/functions/collections.md",
+    # String functions — exact
     "str.format": "reference/functions/general.md",
     "str.tostring": "reference/functions/general.md",
-    "format": "reference/functions/general.md",
-    "tostring": "reference/functions/general.md",
-    "format string": "reference/functions/general.md",
-    "number format": "reference/functions/general.md",
-    "string format": "reference/functions/general.md",
+    # Concepts — unambiguous exact Pine Script terms
+    "repainting": "concepts/timeframes.md",
+    "lookahead": "concepts/timeframes.md",
+    "barstate": "concepts/execution_model.md",
+    "varip": "concepts/execution_model.md",
+    "calc_on_every_tick": "concepts/execution_model.md",
+    "max_bars_back": "concepts/common_errors.md",
+    # Visual built-in functions — exact
+    "barcolor": "visuals/bar_coloring.md",
+    "plotcandle": "visuals/bar_plotting.md",
+    "plotshape": "reference/functions/drawing.md",
+    "plotchar": "visuals/texts_and_shapes.md",
+    "bgcolor": "concepts/colors_and_display.md",
+    "linefill": "visuals/fills.md",
+    # Migration — exact terms
+    "v5 to v6": "reference/migration_v5_to_v6.md",
+    "migration": "reference/migration_v5_to_v6.md",
 }
 
 
@@ -499,11 +373,13 @@ def _validate_path(path: str) -> Path:
     tags={"reference", "discovery"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def list_docs(ctx: Context) -> str:
+async def list_docs():
     """List all available Pine Script v6 documentation files with descriptions.
 
-    Returns a formatted list of documentation files organized by category.
-    Use get_doc(path) to read a specific file.
+    Returns files organised by category with descriptions.
+    For small files use get_doc(path). For large files
+    (ta.md, strategy.md, collections.md, drawing.md, general.md)
+    use list_sections(path) then get_section(path, header).
     """
     with _timed_tool("list_docs"):
         output = ["# Pine Script v6 Documentation", ""]
@@ -514,6 +390,7 @@ async def list_docs(ctx: Context) -> str:
             "Functions": [],
             "Visuals": [],
             "Writing Scripts": [],
+            "Migration": [],
         }
 
         for path, desc in DOCS.items():
@@ -521,6 +398,8 @@ async def list_docs(ctx: Context) -> str:
                 categories["Concepts"].append((path, desc))
             elif path.startswith("reference/functions/"):
                 categories["Functions"].append((path, desc))
+            elif "migration" in path:
+                categories["Migration"].append((path, desc))
             elif path.startswith("reference/"):
                 categories["Reference"].append((path, desc))
             elif path.startswith("visuals/"):
@@ -542,7 +421,7 @@ async def list_docs(ctx: Context) -> str:
     tags={"reference", "discovery"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def list_sections(path: str, ctx: Context) -> str:
+async def list_sections(path: str):
     """List all section headers in a doc file. Use before get_section() to find the right header.
 
     Especially useful for large files like ta.md, strategy.md, collections.md, drawing.md, general.md
@@ -569,8 +448,12 @@ async def list_sections(path: str, ctx: Context) -> str:
     tags={"reference"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> str:
+async def get_doc(path: str, limit: int = 0, offset: int = 0):
     """Read a specific Pine Script v6 documentation file.
+
+    For large files (ta.md, strategy.md, collections.md, drawing.md,
+    general.md) prefer list_sections() + get_section() to avoid
+    loading 1000-2800 line files into context.
 
     Args:
         path: Relative path to the documentation file (e.g., "reference/functions/ta.md")
@@ -579,6 +462,10 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
 
     Returns the contents with metadata header showing total size and current slice.
     """
+    # Enforce safe default for large files before any processing
+    if limit == 0 and path in LARGE_DOCS:
+        limit = 30000
+
     with _timed_tool("get_doc", path=path, limit=limit, offset=offset) as log:
         try:
             full_path = _validate_path(path)
@@ -606,10 +493,11 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
     tags={"reference"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_section(path: str, header: str, ctx: Context, include_children: bool = True) -> str:
+async def get_section(path: str, header: str, include_children: bool = True):
     """Get a specific section from a documentation file by its header.
 
-    Use this after search_docs() finds a header match. Eliminates offset guessing.
+    Use after list_sections() shows available headers, or after
+    resolve_topic() / search_docs() identifies the relevant file.
 
     Args:
         path: Documentation file path (e.g., "reference/functions/strategy.md")
@@ -633,11 +521,11 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
     tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
+async def search_docs(query: str, max_results: int = 10):
     """Grep for an exact string across all Pine Script v6 documentation.
 
     Use this for specific function names, syntax, or code patterns (e.g., "ta.sma", "strategy.exit").
-    For natural language questions, use resolve_topic() instead.
+    For natural language questions, use get_manifest() for routing guidance.
 
     Args:
         query: Exact string to search for (case-insensitive). Use single terms, not phrases.
@@ -685,11 +573,14 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     tags={"reference", "discovery"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_manifest(ctx: Context) -> str:
-    """Get the LLM_MANIFEST.md file which provides routing guidance for Pine Script topics.
+async def get_manifest():
+    """START HERE for natural language Pine Script questions.
 
-    This manifest maps topics to specific documentation files and includes
-    routing logic examples for common queries.
+    Returns the LLM_MANIFEST.md — a routing guide that maps topics
+    to documentation files with tool call sequences for common queries.
+
+    Read this when resolve_topic() returns 0 matches, or when the
+    query is a natural language question rather than an exact API term.
     """
     with _timed_tool("get_manifest"):
         manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
@@ -702,7 +593,7 @@ async def get_manifest(ctx: Context) -> str:
     tags={"reference", "validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_functions(ctx: Context, namespace: str = "") -> str:
+async def get_functions(namespace: str = ""):
     """Get valid Pine Script v6 functions, optionally filtered by namespace.
 
     Args:
@@ -739,7 +630,7 @@ async def get_functions(ctx: Context, namespace: str = "") -> str:
     tags={"validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
+async def validate_function(fn_name: str) -> ValidationResult:
     """Check if a Pine Script v6 function name is valid.
 
     Args:
@@ -758,42 +649,38 @@ async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
         if fn_name in PINE_V6_TOPLEVEL:
             return ValidationResult(valid=True, type="toplevel", function=fn_name)
 
-        suggestion = None
         if "." in fn_name:
-            ns, _, _name = fn_name.rpartition(".")
-            prefix = f"{ns}."
-            candidates = [fn for fn in PINE_V6_FUNCTIONS if fn.startswith(prefix)]
-            for candidate in candidates:
-                if candidate.startswith(fn_name[:len(fn_name)-1]):
-                    suggestion = candidate
-                    break
-            if not suggestion and candidates:
-                suggestion = f"namespace '{ns}' exists with {len(candidates)} functions"
+            ns = fn_name.rpartition(".")[0]
+            if ns in PINE_V6_NAMESPACES:
+                suggestion = f"Not found in {ns}.*. Use get_functions('{ns}') to see all valid {ns}.* functions."
+            else:
+                available = ", ".join(sorted(PINE_V6_NAMESPACES))
+                suggestion = f"Namespace '{ns}' not recognised. Valid namespaces: {available}"
         else:
-            for fn in PINE_V6_TOPLEVEL:
-                if fn.startswith(fn_name[:max(1, len(fn_name)-1)]):
-                    suggestion = fn
-                    break
+            suggestion = "Not found. Use get_functions() to see all top-level functions, or get_functions(namespace) for a specific namespace."
 
         return ValidationResult(valid=False, type=None, function=fn_name, suggestion=suggestion)
 
 
 @mcp.tool(
-    tags={"search", "entry"},
+    tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
-    """Find the right documentation for a Pine Script question or concept.
+async def resolve_topic(query: str) -> ResolveResult:
+    """Fast lookup for exact Pine Script API terms and known concepts.
 
-    START HERE for most queries. Handles natural language and multi-word searches.
-    Examples: "trailing stop loss", "how to prevent repainting", "OHLC variables"
+    Use for exact function names and Pine Script vocabulary
+    (e.g., "ta.rsi", "strategy.entry", "repainting", "request.security").
+
+    For natural language questions, use get_manifest() for routing
+    guidance, then get_doc() or list_sections() + get_section().
 
     Args:
-        query: Natural language query or keywords (e.g., "trailing stop", "repainting", "RSI")
+        query: Exact Pine Script term or known concept keyword.
 
     Returns:
-        ResolveResult with matched documentation paths ranked by relevance.
-        Use get_doc(path) to read the recommended files.
+        ResolveResult with matched doc paths. If no match, suggestion
+        directs to get_manifest() or search_docs().
     """
     with _timed_tool("resolve_topic", query=query) as log:
         query_lower = query.lower()
@@ -811,24 +698,13 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
                     path_scores[path] = []
                 path_scores[path].append(keyword)
 
-        if not path_scores:
-            for keyword, path in TOPIC_MAP.items():
-                for word in query_lower.split():
-                    if len(word) >= 5 and len(keyword) >= 5 and (
-                        word.startswith(keyword[:4]) or keyword.startswith(word[:4])
-                    ):
-                        if path not in path_scores:
-                            path_scores[path] = []
-                        path_scores[path].append(f"~{keyword}")
-                        break
-
         log["matches_found"] = len(path_scores)
 
         if not path_scores:
             return ResolveResult(
                 matches=[],
                 query=query,
-                suggestion="Try search_docs(query) for full-text search"
+                suggestion="No keyword match. Use get_manifest() for doc routing guidance, or search_docs(query) for exact terms."
             )
 
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
@@ -1115,9 +991,10 @@ def _lint_pine(code: str) -> list[dict]:
 
 @mcp.tool(
     tags={"validation"},
-    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False},
+    timeout=30,
 )
-async def lint_script(script: str, ctx: Context) -> LintResult:
+async def lint_script(script: str) -> LintResult:
     """Lint Pine Script for syntax and style issues (free, no API cost).
 
     Fast static analysis that checks for common issues without using AI.

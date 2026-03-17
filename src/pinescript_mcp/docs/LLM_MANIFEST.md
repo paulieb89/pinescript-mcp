@@ -6,32 +6,22 @@
 
 ## How to Use These Tools
 
-Follow this decision tree for every Pine Script query:
+**For exact Pine Script API terms** (`ta.rsi`, `strategy.entry`, `repainting`, `request.security`, etc.):
+→ `resolve_topic(query)` — fast keyword lookup, returns doc path immediately
 
-1. **Start with `resolve_topic(query)`** — natural language routing to the right doc(s). Returns ranked matches with `read_with` companion hints and a `suggestion` field telling you the next step.
+**For natural language questions** ("how do I...", "why is my...", "what's the difference..."):
+→ Read the doc sections below to find the right file, then retrieve it directly
 
-2. **For large files** (`ta.md`, `strategy.md`, `collections.md`, `drawing.md`, `general.md`):
-   - `list_sections(path)` → see all headers
-   - `get_section(path, header)` → read just the section you need
-   - Never load these files whole with `get_doc` — they are 1000–2800 lines.
+**Retrieval tools:**
+- **Large files** (`ta.md`, `strategy.md`, `collections.md`, `drawing.md`, `general.md`) — 1000–2800 lines each:
+  `list_sections(path)` → see all headers → `get_section(path, header)` for specific content
+- **Small files** → `get_doc(path)` to read the whole thing
+- **Exact string grep** → `search_docs(query)` across all docs
 
-3. **For small files** → `get_doc(path)` to read the whole thing directly.
-
-4. **For exact function/syntax lookup** → `search_docs(query)` greps across all docs. Use this when you know the function name (e.g. `"str.format"`, `"strategy.exit"`).
-
-5. **To validate a function name** → `validate_function(fn_name)` checks if a function exists and suggests the closest match if not.
-
-6. **To list functions by namespace** → `get_functions(namespace)` (e.g. `"ta"`, `"strategy"`, `"array"`).
-
-7. **To check Pine Script syntax** → `lint_script(script)` — fast static analysis, no API cost.
-
-**Efficient pattern for most queries:**
-```
-resolve_topic(query)
-  → if LARGE_DOCS: list_sections(path) → get_section(path, header)
-  → if small file: get_doc(path)
-  → if function lookup: search_docs(fn_name)
-```
+**Validation tools:**
+- `validate_function(fn_name)` — checks if a function exists, suggests closest match
+- `get_functions(namespace)` — lists all functions in a namespace (e.g. `"ta"`, `"strategy"`)
+- `lint_script(script)` — static analysis, free, no API cost
 
 ---
 
@@ -160,60 +150,54 @@ resolve_topic(query)
 
 These examples show the full tool call sequence, not just the doc to retrieve.
 
-**"What's the RSI function signature?"**
+**"What's the ta.rsi() signature?"** — exact API term → resolve_topic
 ```
-resolve_topic("RSI")
-  → ta.md (LARGE_DOCS)
+resolve_topic("ta.rsi")
+  → reference/functions/ta.md (LARGE_DOCS)
 list_sections("reference/functions/ta.md")
   → find "## ta.rsi()"
 get_section("reference/functions/ta.md", "ta.rsi()")
 ```
 
-**"Color bars based on volume"**
+**"Color bars based on volume"** — natural language → use manifest sections above
 ```
-resolve_topic("color bars volume")
-  → visuals/bar_coloring.md + reference/variables.md
-get_doc("visuals/bar_coloring.md")   ← small file, read whole
-get_doc("reference/variables.md")    ← for volume variable
+get_doc("visuals/bar_coloring.md")   ← Visuals section: barcolor()
+get_doc("reference/variables.md")    ← API Reference section: volume
 ```
 
-**"Write a trailing stop strategy"**
+**"Write a trailing stop strategy"** — natural language → manifest + search
 ```
-resolve_topic("trailing stop strategy")
-  → strategy.md (LARGE_DOCS, read_with: execution_model.md)
-list_sections("reference/functions/strategy.md")
+list_sections("reference/functions/strategy.md")   ← Function Reference section
   → find "## strategy.exit()"
 get_section("reference/functions/strategy.md", "strategy.exit()")
-get_doc("concepts/execution_model.md")
+get_doc("concepts/execution_model.md")             ← Concepts section
 ```
 
-**"Convert my v5 script to v6"**
+**"How does request.security work?"** — exact API term → resolve_topic
 ```
-resolve_topic("convert v5")
-  → reference/migration_v5_to_v6.md
-get_doc("reference/migration_v5_to_v6.md")
+resolve_topic("request.security")
+  → reference/functions/request.md (read_with: concepts/timeframes.md)
+get_doc("reference/functions/request.md")
+get_doc("concepts/timeframes.md")
 ```
 
-**"How do I format numbers in a table?"**
+**"How do I format numbers in a table?"** — natural language → search + manifest
 ```
-resolve_topic("format numbers table")
-  → general.md (LARGE_DOCS) + tables
 search_docs("str.format")              ← find exact usage lines
 get_section("reference/functions/general.md", "str.format()")
-get_doc("visuals/tables.md")
+get_doc("visuals/tables.md")           ← Visuals section: tables
 ```
 
-**"How do I prevent repainting in a higher timeframe strategy?"**
+**"What does repainting mean?"** — exact Pine Script term → resolve_topic
 ```
-resolve_topic("repainting higher timeframe strategy")
-  → concepts/timeframes.md + strategy.md (read_with: execution_model.md)
+resolve_topic("repainting")
+  → concepts/timeframes.md
 get_doc("concepts/timeframes.md")
-get_section("reference/functions/strategy.md", "strategy.entry()")
 ```
 
-**"What's the difference between var and varip?"**
+**"What's the difference between var and varip?"** — varip is exact → resolve_topic
 ```
-resolve_topic("var varip")
+resolve_topic("varip")
   → concepts/execution_model.md
-get_doc("concepts/execution_model.md")   ← small enough to read whole
+get_doc("concepts/execution_model.md")
 ```
