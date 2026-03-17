@@ -430,13 +430,14 @@ async def list_sections(path: str):
     Args:
         path: Documentation file path (e.g., "reference/functions/ta.md")
 
-    Returns section headers with their levels (##, ###).
+    Returns top-level section headers (## level) for navigation. Subsections (###) are omitted since get_section(include_children=True) returns them when reading.
     """
     with _timed_tool("list_sections", path=path) as log:
         try:
             full_path = _validate_path(path)
             content = full_path.read_text(encoding="utf-8")
-            headers = [line for line in content.splitlines() if line.startswith("#")]
+            headers = [line for line in content.splitlines()
+                       if line.startswith("#") and not line.startswith("###")]
             log["headers_found"] = len(headers)
             return "\n".join(headers)
         except ValueError as e:
