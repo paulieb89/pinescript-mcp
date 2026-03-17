@@ -1038,6 +1038,19 @@ async def lint_script(script: str) -> LintResult:
     Returns:
         LintResult with status, count, and list of issues found.
     """
+    MAX_SCRIPT_SIZE = 50_000  # 50KB — no real Pine Script is larger
+    if len(script) > MAX_SCRIPT_SIZE:
+        return LintResult(
+            status="issues_found",
+            count=1,
+            issues=[LintIssue(
+                line=1,
+                rule="E000_script_too_large",
+                message=f"Script exceeds {MAX_SCRIPT_SIZE} chars. Truncate to lint.",
+                severity="error",
+            )]
+        )
+
     with _timed_tool("lint_script", script_length=len(script)) as log:
         syntax_issues = _lint_syntax(script)
         pattern_issues = _lint_pine(script)
