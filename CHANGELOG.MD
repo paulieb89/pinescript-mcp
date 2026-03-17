@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.6.2 → v0.6.3
+
+### Added: Prometheus metrics endpoint
+
+New `/metrics` endpoint exposes tool-level observability for Fly.io's managed Grafana (fly-metrics.net):
+- `pinescript_tool_calls_total` — counter by tool name
+- `pinescript_tool_errors_total` — counter by tool name
+- `pinescript_tool_duration_seconds` — histogram with latency buckets (1ms–5s)
+
+Instrumentation lives in `_timed_tool.__exit__()` so all 9 tools are covered with zero per-tool code. Custom `CollectorRegistry` keeps `/metrics` output clean (no default Python GC/process metrics).
+
+Fly scrapes every 15s via `[metrics]` section in fly.toml. PromQL queries for call rate, p95 latency, error rate, and top tools all work out of the box.
+
+New dependency: `prometheus_client>=0.21.0`.
+
+## v0.6.1 → v0.6.2
+
+### Fixed: list_sections subsection noise
+
+`list_sections()` now returns only `##`-level headers, filtering out `### Returns`, `### Remarks`, `### Code Example` subsections that appear for every function. ta.md drops from ~200 lines to ~65 meaningful function headers. `get_section(include_children=True)` still returns full subsection content when reading.
+
 ## v0.5.2 → v0.6.0
 
 ### Breaking: TOPIC_MAP simplified (168 → 49 entries)
