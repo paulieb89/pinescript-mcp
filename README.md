@@ -110,19 +110,20 @@ Connect directly to the hosted server - no Python or uvx needed:
 }
 ```
 
-## Available Tools
+## Available Tools (10)
 
 | Tool | Description |
 |------|-------------|
-| `resolve_topic(query)` | **Start here** - Map a question to relevant docs |
-| `get_doc(path)` | Read a specific documentation file |
-| `get_section(path, header)` | Read a specific section from a documentation file |
-| `search_docs(query)` | Full-text search across all docs |
+| `get_manifest()` | **Start here** for natural language questions — routing guide |
+| `resolve_topic(query)` | Fast lookup for exact API terms (`ta.rsi`, `repainting`) |
+| `search_docs(query)` | Grep for exact strings across all docs |
 | `list_docs()` | List all documentation files with descriptions |
+| `list_sections(path)` | List `##` headers in a doc file (for navigating large files) |
+| `get_doc(path)` | Read a specific documentation file |
+| `get_section(path, header)` | Read a specific section by header |
 | `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
 | `validate_function(name)` | Check if a function exists in Pine v6 |
-| `lint_script(script)` | Lint Pine Script (15 rules, free, no API cost) |
-| `get_manifest()` | Get routing guidance for topics |
+| `lint_script(script)` | Lint Pine Script (17 rules, free, no API cost) |
 
 ## Available Prompts
 

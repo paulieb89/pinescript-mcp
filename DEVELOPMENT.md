@@ -5,8 +5,9 @@
 ```bash
 git clone https://gitlab.com/articat1066/pinescript-v6-mcp
 cd pinescript-v6-mcp
-pip install -e .
-pinescript-mcp  # runs stdio server
+uv sync
+uv run python -m pinescript_mcp          # stdio mode
+uv run python -m pinescript_mcp --http   # HTTP mode (test at localhost:8000/health)
 ```
 
 ## Project Structure
@@ -15,135 +16,45 @@ pinescript-mcp  # runs stdio server
 pinescript-mcp/
 ├── src/pinescript_mcp/
 │   ├── __init__.py          # Package version
-│   ├── __main__.py           # python -m entrypoint
-│   ├── server.py             # MCP server implementation
-│   └── docs/                 # Bundled documentation
-│       ├── LLM_MANIFEST.md   # Topic routing index
-│       ├── concepts/         # Execution model, timeframes, etc.
-│       ├── reference/        # Types, variables, functions
-│       ├── visuals/          # Plots, drawings, tables
-│       └── writing_scripts/  # Style guide, debugging
-├── pyproject.toml            # Package metadata
-├── server.json               # MCP Registry manifest
-├── Dockerfile                # HTTP server container
-├── fly.toml                  # Fly.io deployment config
-└── .bumpversion.toml         # Version management
+│   ├── __main__.py          # python -m entrypoint
+│   ├── server.py            # All MCP tools + lint rules + middleware
+│   └── docs/                # Bundled documentation (frozen per version)
+│       ├── LLM_MANIFEST.md  # Topic routing index for LLMs
+│       ├── pine_v6_functions.json  # Function allowlist
+│       ├── concepts/        # Execution model, timeframes, etc.
+│       ├── reference/       # Types, variables, functions/
+│       ├── visuals/         # Plots, drawings, tables
+│       └── writing_scripts/ # Style guide, debugging
+├── pyproject.toml           # Package metadata + dependencies
+├── server.json              # MCP Registry manifest
+├── Dockerfile               # HTTP server container
+├── fly.toml                 # Fly.io deployment + metrics scraping
+└── .bumpversion.toml        # Version sync across 4 files
 ```
 
-## Running Locally
+See [README.md](README.md) for the full tools list and user-facing documentation.
 
-### stdio mode (for Claude Code/Desktop)
+## Adding a Tool
 
-```bash
-pinescript-mcp
-```
+1. Add `@mcp.tool()` function in `server.py`
+2. Write a clear docstring — this is what the consumer LLM sees
+3. Add to `TOPIC_MAP` if the tool introduces new routable terms
+4. Test locally, bump version, publish
 
-### HTTP mode (for testing public server)
+## Updating Bundled Docs
 
-```bash
-pinescript-mcp --http --port 8000
-```
+1. Edit docs in main repo (`docs/concepts/`, `docs/reference/`, etc.)
+2. Run `./sync-docs.sh` to copy to `src/pinescript_mcp/docs/`
+3. Update `LLM_MANIFEST.md` if adding new topics
+4. Update `pine_v6_functions.json` if adding function references
+5. Bump version, publish
 
-Then test:
-```bash
-curl http://localhost:8000/health
-```
+## Architecture
 
-## Tools Overview
-
-| Tool | Purpose |
-|------|---------|
-| `list_docs()` | List all doc files with descriptions |
-| `get_doc(path)` | Read a specific doc file |
-| `search_docs(query)` | Full-text search across docs |
-| `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
-| `validate_function(name)` | Check if function exists in Pine v6 |
-| `resolve_topic(query)` | Map question to relevant doc files |
-| `get_manifest()` | Get LLM routing guidance |
-
-## Adding Documentation
-
-1. Add markdown files to `src/pinescript_mcp/docs/`
-2. Update `LLM_MANIFEST.md` if adding new topics
-3. Update `pine_v6_functions.json` if adding function references
-
-Documentation is bundled in the package - no external fetching.
-
-## Version Bumping
-
-Uses [bump-my-version](https://github.com/callowayproject/bump-my-version):
-
-```bash
-# Install once
-pipx install bump-my-version
-
-# Bump and tag
-bump-my-version patch  # 0.2.1 → 0.2.2
-bump-my-version minor  # 0.2.1 → 0.3.0
-
-# Push with tags
-git push && git push --tags
-```
-
-This updates:
-- `pyproject.toml`
-- `src/pinescript_mcp/__init__.py`
-- `server.json` (both version fields)
-
-## Publishing to PyPI
-
-```bash
-# Build
-uv build
-
-# Publish (requires API token)
-uvx twine upload --config-file .pypirc dist/*
-```
-
-## Deploying to Fly.io
-
-```bash
-cd pinescript-mcp
-fly deploy
-```
-
-The server runs at https://pinescript-mcp.fly.dev/mcp
-
-Health check: https://pinescript-mcp.fly.dev/health
-
-## Testing MCP Connection
-
-### With Claude Code
-
-Add to `.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "pinescript-docs": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": ["pinescript-mcp"]
-    }
-  }
-}
-```
-
-### With HTTP (public server)
-
-```json
-{
-  "mcpServers": {
-    "pinescript-docs": {
-      "type": "http",
-      "url": "https://pinescript-mcp.fly.dev/mcp/"
-    }
-  }
-}
-```
-
-## Architecture Notes
-
-- Uses `mcp.server.fastmcp.FastMCP` from the official MCP SDK
-- HTTP transport uses streamable-http (SSE is deprecated)
-- DNS rebinding protection disabled for public server access
-- Documentation loaded once at startup via `importlib.resources`
+- **Framework:** `fastmcp.FastMCP` ([gofastmcp.com](https://gofastmcp.com)) — not the official `mcp` SDK
+- **Transport:** streamable-http in production (SSE is deprecated)
+- **Middleware:** Rate limiting → structured logging → response limiting → response caching (order matters)
+- **Metrics:** Prometheus via `_timed_tool` context manager → `/metrics` endpoint → Fly.io Grafana
+- **Docs loading:** `importlib.resources` at startup, no external fetching
+- **Caching:** `ResponseCachingMiddleware` with 1hr TTL + disk persistence (survives Fly suspend)
+- **DNS rebinding:** Disabled for public server access
