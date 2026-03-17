@@ -16,6 +16,7 @@ from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToo
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from fastmcp.utilities.logging import get_logger
 from key_value.aio.stores.disk import DiskStore
 from pydantic import BaseModel
 import time
@@ -65,6 +66,7 @@ class TopicMatch(BaseModel):
     path: str
     matched_keywords: list[str]
     score: int
+    read_with: list[str] = []
 
 
 class ResolveResult(BaseModel):
@@ -105,14 +107,17 @@ mcp.add_middleware(ResponseCachingMiddleware(
     cache_storage=DiskStore(directory=str(CACHE_DIR)),
     call_tool_settings=CallToolSettings(
         ttl=3600,  # 1 hour
-        included_tools=["get_doc", "get_section", "list_docs", "get_manifest"]
+        included_tools=["get_doc", "get_section", "list_docs", "get_manifest", "list_sections"]
     )
 ))
 
 
+_logger = get_logger("pinescript_mcp.tools")
+
+
 def _log_tool_call(data: dict) -> None:
-    """Log tool call to stderr for visibility in client logs."""
-    print(f"[TOOL] {json.dumps(data)}", file=sys.stderr, flush=True)
+    """Log tool call via FastMCP logger."""
+    _logger.info(json.dumps(data))
 
 # Path resolution - support both installed package and development
 # For Python 3.10+, use importlib.resources
@@ -136,6 +141,23 @@ ALLOWED_DIRS = ["concepts", "reference", "writing_scripts", "visuals"]
 
 # Path to functions JSON
 FUNCTIONS_JSON = DOCS_ROOT / "pine_v6_functions.json"
+
+# Large docs that benefit from section-level retrieval
+LARGE_DOCS = {
+    "reference/functions/ta.md",
+    "reference/functions/strategy.md",
+    "reference/functions/collections.md",
+    "reference/functions/drawing.md",
+    "reference/functions/general.md",
+}
+
+# Known doc combinations — companion docs to read alongside a match
+DOC_COMPANIONS = {
+    "reference/functions/ta.md": ["reference/functions/drawing.md"],
+    "reference/functions/strategy.md": ["concepts/execution_model.md"],
+    "reference/functions/request.md": ["concepts/timeframes.md"],
+    "reference/functions/drawing.md": ["reference/functions/ta.md"],
+}
 
 
 def _load_functions() -> tuple[set, set, set]:
@@ -196,7 +218,8 @@ DOCS = {
     "writing_scripts/debugging.md": "Debugging techniques, log.*, runtime.error()",
     "writing_scripts/limitations.md": "Pine Script limitations, max bars, memory limits",
     "writing_scripts/profiling_and_optimization.md": "Performance optimization, profiling tools",
-    "writing_scripts/publishing_scripts.md": "Publishing to TradingView, script visibility",
+    # Migration
+    "reference/migration_v5_to_v6.md": "v5 to v6 migration guide, breaking changes, renamed functions",
 }
 
 # Topic mapping for resolve_topic() - keyword -> doc path
@@ -334,8 +357,25 @@ TOPIC_MAP = {
     # Visuals (detailed)
     "plotcandle": "visuals/bar_plotting.md",
     "plotbar": "visuals/bar_plotting.md",
+    "ohlc plot": "visuals/bar_plotting.md",
+    "custom candle": "visuals/bar_plotting.md",
     "barcolor": "visuals/bar_coloring.md",
+    "bar color": "visuals/bar_coloring.md",
+    "color bars": "visuals/bar_coloring.md",
+    "candle color": "visuals/bar_coloring.md",
     "linefill": "visuals/fills.md",
+    "fill between": "visuals/fills.md",
+    "plot fill": "visuals/fills.md",
+    "horizontal line": "visuals/levels.md",
+    "draw line": "visuals/lines_and_boxes.md",
+    "draw box": "visuals/lines_and_boxes.md",
+    "display table": "visuals/tables.md",
+    "data table": "visuals/tables.md",
+    "text label": "visuals/texts_and_shapes.md",
+    "shape marker": "visuals/texts_and_shapes.md",
+    "plotchar": "visuals/texts_and_shapes.md",
+    "background": "visuals/backgrounds.md",
+    "chart background": "visuals/backgrounds.md",
     # Writing Scripts
     "debug": "writing_scripts/debugging.md",
     "debugging": "writing_scripts/debugging.md",
@@ -349,11 +389,18 @@ TOPIC_MAP = {
     "optimization": "writing_scripts/profiling_and_optimization.md",
     "profiling": "writing_scripts/profiling_and_optimization.md",
     "performance": "writing_scripts/profiling_and_optimization.md",
-    "publish": "writing_scripts/publishing_scripts.md",
-    "publishing": "writing_scripts/publishing_scripts.md",
     "style guide": "writing_scripts/style_guide.md",
     "naming convention": "writing_scripts/style_guide.md",
     "best practice": "writing_scripts/style_guide.md",
+    # Migration
+    "v5 to v6": "reference/migration_v5_to_v6.md",
+    "migrate": "reference/migration_v5_to_v6.md",
+    "migration": "reference/migration_v5_to_v6.md",
+    "what changed": "reference/migration_v5_to_v6.md",
+    "breaking change": "reference/migration_v5_to_v6.md",
+    "deprecated": "reference/migration_v5_to_v6.md",
+    "upgrade": "reference/migration_v5_to_v6.md",
+    "convert v5": "reference/migration_v5_to_v6.md",
 }
 
 
@@ -478,9 +525,54 @@ async def list_docs(ctx: Context) -> str:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
+
+
+@mcp.tool(
+    tags={"reference", "discovery"},
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+)
+async def list_sections(path: str, ctx: Context) -> str:
+    """List all section headers in a doc file. Use before get_section() to find the right header.
+
+    Especially useful for large files like ta.md, strategy.md, collections.md, drawing.md, general.md
+    which have 50-115 sections each.
+
+    Args:
+        path: Documentation file path (e.g., "reference/functions/ta.md")
+
+    Returns section headers with their levels (##, ###).
+    """
+    start = time.time()
+
+    try:
+        full_path = _validate_path(path)
+        content = full_path.read_text(encoding="utf-8")
+        headers = [line for line in content.splitlines() if line.startswith("#")]
+        result = "\n".join(headers)
+
+        log_data = {
+            "event": "tool_call",
+            "tool": "list_sections",
+            "path": path,
+            "headers_found": len(headers),
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+
+        return result
+    except ValueError as e:
+        log_data = {
+            "event": "tool_call",
+            "tool": "list_sections",
+            "path": path,
+            "error": str(e),
+            "duration_ms": int((time.time() - start) * 1000)
+        }
+        _log_tool_call(log_data)
+        return f"Error: {e}"
 
 
 @mcp.tool(
@@ -528,7 +620,7 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
             "duration_ms": int((time.time() - start) * 1000)
         }
         _log_tool_call(log_data)
-        await ctx.info(json.dumps(log_data))
+    
 
         return result
     except ValueError as e:
@@ -540,7 +632,7 @@ async def get_doc(path: str, ctx: Context, limit: int = 0, offset: int = 0) -> s
             "duration_ms": int((time.time() - start) * 1000)
         }
         _log_tool_call(log_data)
-        await ctx.info(json.dumps(log_data))
+    
         return f"Error: {e}"
 
 
@@ -579,7 +671,7 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
             "duration_ms": int((time.time() - start) * 1000)
         }
         _log_tool_call(log_data)
-        await ctx.info(json.dumps(log_data))
+    
 
         return result
 
@@ -593,7 +685,7 @@ async def get_section(path: str, header: str, ctx: Context, include_children: bo
             "duration_ms": int((time.time() - start) * 1000)
         }
         _log_tool_call(log_data)
-        await ctx.info(json.dumps(log_data))
+    
         return f"Error: {e}"
 
 
@@ -615,7 +707,7 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
     """
     start = time.time()
 
-    results = []
+    all_results = []
     pattern = re.compile(re.escape(query), re.IGNORECASE)
 
     for rel_path in DOCS.keys():
@@ -627,18 +719,18 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
             lines = full_path.read_text(encoding="utf-8").splitlines()
             for i, line in enumerate(lines, 1):
                 if pattern.search(line):
-                    results.append({
+                    all_results.append({
                         "file": rel_path,
                         "line": i,
-                        "content": line.strip()[:200]  # Truncate long lines
+                        "content": line.strip()[:200],
+                        "is_header": 1 if line.strip().startswith("#") else 0
                     })
-                    if len(results) >= max_results:
-                        break
         except Exception:
             continue
 
-        if len(results) >= max_results:
-            break
+    # Sort: headers first (more useful context), then by file/line for stability
+    all_results.sort(key=lambda r: (-r["is_header"], r["file"], r["line"]))
+    results = all_results[:max_results]
 
     if not results:
         result = f"No results found for: {query}"
@@ -659,7 +751,7 @@ async def search_docs(query: str, ctx: Context, max_results: int = 10) -> str:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
@@ -688,7 +780,7 @@ async def get_manifest(ctx: Context) -> str:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
@@ -742,7 +834,7 @@ async def get_functions(ctx: Context, namespace: str = "") -> str:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
@@ -806,7 +898,7 @@ async def validate_function(fn_name: str, ctx: Context) -> ValidationResult:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
@@ -834,19 +926,27 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
 
     # Count matches per path
     path_scores: dict[str, list[str]] = {}
+    query_words = set(query_lower.split())
 
     for keyword, path in TOPIC_MAP.items():
-        if keyword in query_lower:
+        # Multi-word keywords: check substring match (e.g. "trailing stop" in query)
+        # Single-word keywords: require whole-word match to avoid "for" matching "format"
+        if " " in keyword:
+            matched = keyword in query_lower
+        else:
+            matched = keyword in query_words
+        if matched:
             if path not in path_scores:
                 path_scores[path] = []
             path_scores[path].append(keyword)
 
     if not path_scores:
-        # No exact matches - try partial matching
+        # No exact matches - try partial matching (strict: 5+ chars, 4-char prefix)
         for keyword, path in TOPIC_MAP.items():
-            # Check if any word in query starts with keyword or vice versa
             for word in query_lower.split():
-                if word.startswith(keyword[:3]) or keyword.startswith(word[:3]):
+                if len(word) >= 5 and len(keyword) >= 5 and (
+                    word.startswith(keyword[:4]) or keyword.startswith(word[:4])
+                ):
                     if path not in path_scores:
                         path_scores[path] = []
                     path_scores[path].append(f"~{keyword}")
@@ -862,15 +962,33 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
         # Sort by number of keyword matches (most relevant first)
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
 
-        matches = [
-            TopicMatch(path=path, matched_keywords=keywords, score=len(keywords))
-            for path, keywords in ranked
-        ]
+        # Build matches with companion doc hints
+        existing_paths = {path for path in path_scores.keys()}
+        matches = []
+        for path, keywords in ranked:
+            companions = DOC_COMPANIONS.get(path, [])
+            filtered_companions = [c for c in companions if c not in existing_paths]
+            matches.append(TopicMatch(
+                path=path,
+                matched_keywords=keywords,
+                score=len(keywords),
+                read_with=filtered_companions,
+            ))
+
+        # Build smart suggestion based on top match
+        top_path = matches[0].path
+        if top_path in LARGE_DOCS:
+            suggestion = f"Large file — use list_sections('{top_path}') to find headers, then get_section() to read specific sections."
+        elif len(matches) > 1:
+            paths = [m.path for m in matches[:3]]
+            suggestion = f"Read these together: {', '.join(paths)}. Use get_section() for large files."
+        else:
+            suggestion = f"Use get_doc('{top_path}') to read the top match"
 
         result = ResolveResult(
             matches=matches,
             query=query,
-            suggestion=f"Use get_doc('{matches[0].path}') to read the top match"
+            suggestion=suggestion
         )
 
     log_data = {
@@ -881,7 +999,7 @@ async def resolve_topic(query: str, ctx: Context) -> ResolveResult:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
@@ -1177,7 +1295,7 @@ async def lint_script(script: str, ctx: Context) -> LintResult:
         "duration_ms": int((time.time() - start) * 1000)
     }
     _log_tool_call(log_data)
-    await ctx.info(json.dumps(log_data))
+
 
     return result
 
