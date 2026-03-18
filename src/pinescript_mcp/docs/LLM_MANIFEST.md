@@ -150,6 +150,8 @@
 
 These examples show the full tool call sequence, not just the doc to retrieve.
 
+> **HTTP clients:** wrap all tool calls below with `call_tool(name, arguments)` as shown in the Tool Discovery section above.
+
 **"What's the ta.rsi() signature?"** — exact API term → resolve_topic
 ```
 resolve_topic("ta.rsi")
@@ -193,6 +195,16 @@ get_doc("visuals/tables.md")           ← Visuals section: tables
 resolve_topic("repainting")
   → concepts/timeframes.md
 get_doc("concepts/timeframes.md")
+```
+
+**"How do I prevent repainting in a higher timeframe strategy?"** — needs both concept + function docs
+```
+resolve_topic("repainting")
+  → concepts/timeframes.md
+resolve_topic("request.security")
+  → reference/functions/request.md (read_with: concepts/timeframes.md)
+get_doc("concepts/timeframes.md")               ← lookahead warnings, calc_on_every_tick
+get_section("reference/functions/request.md", "request.security()")  ← non-repainting pattern
 ```
 
 **"What's the difference between var and varip?"** — varip is exact → resolve_topic

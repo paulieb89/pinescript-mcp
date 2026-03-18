@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## v0.6.3 → v0.6.4
+
+### Added: Repainting routing example in manifest
+
+New routing example explicitly shows the two-doc retrieval pattern for repainting questions (`concepts/timeframes.md` + `reference/functions/request.md`). Comments like `← lookahead warnings, calc_on_every_tick` signal which doc carries which knowledge — closing the quality gap between claude.ai (which reads the full manifest) and Claude Code (which tends to stop after the function reference).
+
+### Added: HTTP client call_tool hint in routing examples
+
+Routing examples section now includes a note directing HTTP clients to wrap tool calls with `call_tool()`, matching the preamble's discovery instructions. Eliminates cold-start tool call failures.
+
+### Removed: sync-docs.sh
+
+The package manifest has diverged significantly from the repo-level `docs/LLM_MANIFEST.md` (212 lines vs 96). The sync script would clobber the enhanced package manifest. Removed to prevent accidental overwrites — will be rewritten when needed.
+
+### Added: BM25 tool discovery for HTTP clients
+
+claude.ai's 5-tool injection limit meant users couldn't access half the tools. Now HTTP mode uses FastMCP's `BM25SearchTransform` for progressive disclosure:
+
+**claude.ai / HTTP:**
+- `get_manifest` and `lint_script` always visible (pinned)
+- `search_tools` + `call_tool` for on-demand discovery of all 10 tools
+- Manifest opens with `call_tool` patterns — no cold-start friction
+
+**Claude Code / stdio:** Unchanged — all 10 tools load directly, manifest has no `call_tool` instructions.
+
+### Added: Environment-aware manifest
+
+`get_manifest()` detects `ctx.transport == "streamable-http"` and prepends HTTP-specific discovery instructions. Stdio clients get the standard manifest. No module-level flags — uses FastMCP's built-in transport detection.
+
+### Added: Lint input size guard
+
+`lint_script` rejects scripts over 50KB with `E000_script_too_large`. Prevents the AST parser from stalling on pathological inputs (p95 was 4-5s on large scripts).
+
+### Changed: FastMCP 3.0.1 → 3.1.0
+
+Required for `BM25SearchTransform`. No breaking changes.
+
+### Fixed: Default port 8000 → 8080
+
+Argparse default now matches Dockerfile `ENV PORT=8080` and fly.toml `internal_port = 8080`.
+
 ## v0.6.2 → v0.6.3
 
 ### Added: Prometheus metrics endpoint
