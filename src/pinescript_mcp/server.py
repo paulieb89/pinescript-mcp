@@ -1090,13 +1090,23 @@ def _lint_pine(code: str) -> list[dict]:
     return issues
 
 
-def _lint_undeclared(code: str) -> list[dict]:
+def _lint_undeclared(code: str, pattern_issues: list[dict] | None = None) -> list[dict]:
     """Walk the pynescript AST to find identifiers used but never declared.
 
     Uses flat scope (no nesting analysis) — all declarations are visible
     everywhere. This is conservative: may miss some true errors in nested
     scopes but avoids false positives.
+
+    Suppresses identifiers already flagged by pattern rules (e.g. E005/E006
+    catch study()/security() with better messages — E016 shouldn't duplicate).
     """
+    # Build set of identifiers already covered by pattern rules
+    _already_flagged: set[str] = set()
+    for issue in pattern_issues or []:
+        msg = issue.get("message", "")
+        # Extract function name from messages like "study() does not exist..."
+        if "() " in msg:
+            _already_flagged.add(msg.split("(")[0].strip())
     if not HAS_PYNESCRIPT:
         return []
 
@@ -1174,6 +1184,8 @@ def _lint_undeclared(code: str) -> list[dict]:
             continue
         if name in PINE_V6_BUILTIN_IDENTIFIERS:
             continue
+        if name in _already_flagged:
+            continue
 
         key = (name, line)
         if key in seen:
@@ -1222,7 +1234,7 @@ async def lint_script(script: str) -> LintResult:
     with _timed_tool("lint_script", script_length=len(script)) as log:
         syntax_issues = _lint_syntax(script)
         pattern_issues = _lint_pine(script)
-        undeclared_issues = _lint_undeclared(script) if not syntax_issues else []
+        undeclared_issues = _lint_undeclared(script, pattern_issues) if not syntax_issues else []
         raw_issues = syntax_issues + pattern_issues + undeclared_issues
         issues = [LintIssue(**issue) for issue in raw_issues]
         log["issues_found"] = len(issues)
