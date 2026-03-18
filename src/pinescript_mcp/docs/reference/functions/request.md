@@ -2,6 +2,17 @@
 
 Provides a daily rate that can be used to convert a value expressed in the from currency to another in the to currency.
 
+### Syntax
+```
+request.currency_rate(from, to, ignore_invalid_currency) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| from | series string | yes | — |
+| to | series string | yes | — |
+| ignore_invalid_currency | series bool | no | false |
+
 ### Remarks
 If from and to arguments are equal, function returns 1. Please note that using this variable/function can cause indicator repainting.
 
@@ -18,6 +29,20 @@ plot(close * rate)
 ## request.dividends()
 
 Requests dividends data for the specified symbol.
+
+### Syntax
+```
+request.dividends(ticker, field, gaps, lookahead, ignore_invalid_symbol, currency) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| ticker | simple string | yes | — |
+| field | simple string | no | dividends.gross |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| lookahead | barmerge_lookahead | no | barmerge.lookahead_off |
+| ignore_invalid_symbol | simple bool | no | false |
+| currency | simple string | no | syminfo.currency |
 
 ### Returns
 Requested series, or n/a if there is no dividends data for the specified symbol.
@@ -38,6 +63,20 @@ plot(s2)
 
 Requests earnings data for the specified symbol.
 
+### Syntax
+```
+request.earnings(ticker, field, gaps, lookahead, ignore_invalid_symbol, currency) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| ticker | simple string | yes | — |
+| field | simple string | no | earnings.actual |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| lookahead | barmerge_lookahead | no | barmerge.lookahead_off |
+| ignore_invalid_symbol | simple bool | no | false |
+| currency | simple string | no | syminfo.currency |
+
 ### Returns
 Requested series, or n/a if there is no earnings data for the specified symbol.
 
@@ -56,6 +95,18 @@ plot(s2)
 ## request.economic()
 
 Requests economic data for a symbol. Economic data includes information such as the state of a country's economy (GDP, inflation rate, etc.) or of a particular industry (steel production, ICU beds, etc.).
+
+### Syntax
+```
+request.economic(country_code, field, gaps, ignore_invalid_symbol) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| country_code | series string | yes | — |
+| field | series string | yes | — |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| ignore_invalid_symbol | series bool | no | false |
 
 ### Returns
 Requested series.
@@ -77,6 +128,20 @@ plot(e)
 
 Requests financial series for symbol.
 
+### Syntax
+```
+request.financial(symbol, financial_id, period, gaps, ignore_invalid_symbol, currency) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| symbol | series string | yes | — |
+| financial_id | series string | yes | — |
+| period | series string | yes | — |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| ignore_invalid_symbol | series bool | no | false |
+| currency | series string | no | syminfo.currency |
+
 ### Returns
 Requested series.
 
@@ -94,6 +159,18 @@ plot(f)
 
 Note: This function has been deprecated due to the API change from NASDAQ Data Link. Requests for "QUANDL" symbols are no longer valid and requests for them return a runtime error.
 
+### Syntax
+```
+request.quandl(ticker, gaps, index, ignore_invalid_symbol) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| ticker | simple string | yes | — |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| index | simple int | no | 0 |
+| ignore_invalid_symbol | simple bool | no | false |
+
 ### Returns
 Requested series.
 
@@ -110,6 +187,22 @@ plot(f)
 ## request.security()
 
 Requests the result of an expression from a specified context (symbol and timeframe).
+
+### Syntax
+```
+request.security(symbol, timeframe, expression, gaps, lookahead, ignore_invalid_symbol, currency, calc_bars_count) → series <type>
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| symbol | series string | yes | — |
+| timeframe | series string | yes | — |
+| expression | <any type> | yes | — |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| lookahead | barmerge_lookahead | no | barmerge.lookahead_off |
+| ignore_invalid_symbol | series bool | no | false |
+| currency | series string | no | syminfo.currency |
+| calc_bars_count | series int | no | — |
 
 ### Returns
 A result determined by expression.
@@ -171,6 +264,21 @@ plotcandle(array.get(ohlcArray, 0), array.get(ohlcArray, 1), array.get(ohlcArray
 
 Requests the results of an expression from a specified symbol on a timeframe lower than or equal to the chart's timeframe. It returns an array containing one element for each lower-timeframe bar within the chart bar. On a 5-minute chart, requesting data using a timeframe argument of "1" typically returns an array with five elements representing the value of the expression on each 1-minute bar, ordered by time with the earliest value first.
 
+### Syntax
+```
+request.security_lower_tf(symbol, timeframe, expression, ignore_invalid_symbol, currency, ignore_invalid_timeframe, calc_bars_count) → array<type>
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| symbol | series string | yes | — |
+| timeframe | series string | yes | — |
+| expression | <any type> | yes | — |
+| ignore_invalid_symbol | series bool | no | false |
+| currency | series string | no | syminfo.currency |
+| ignore_invalid_timeframe | series bool | no | false |
+| calc_bars_count | series int | no | — |
+
 ### Returns
 An array of a type determined by expression, or a tuple of these.
 
@@ -195,6 +303,19 @@ if bar_index == last_bar_index - 1
 
 Requests data from a user-maintained GitHub repository and returns it as a series. An in-depth tutorial on how to add new data can be found here.
 
+### Syntax
+```
+request.seed(source, symbol, expression, ignore_invalid_symbol, calc_bars_count) → series <type>
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| source | series string | yes | — |
+| symbol | series string | yes | — |
+| expression | <any type> | yes | — |
+| ignore_invalid_symbol | series bool | no | false |
+| calc_bars_count | series int | no | — |
+
 ### Returns
 Requested series or tuple of series, which may include array/matrix IDs.
 
@@ -214,6 +335,19 @@ plot(devActSMA, "BTC Development Activity SMA10", color = color.yellow)
 ## request.splits()
 
 Requests splits data for the specified symbol.
+
+### Syntax
+```
+request.splits(ticker, field, gaps, lookahead, ignore_invalid_symbol) → series float
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| ticker | simple string | yes | — |
+| field | simple string | no | splits.denominator |
+| gaps | barmerge_gaps | no | barmerge.gaps_off |
+| lookahead | barmerge_lookahead | no | barmerge.lookahead_off |
+| ignore_invalid_symbol | simple bool | no | false |
 
 ### Returns
 Requested series, or n/a if there is no splits data for the specified symbol.

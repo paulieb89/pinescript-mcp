@@ -31,19 +31,19 @@ METRICS_REGISTRY = CollectorRegistry()
 tool_calls_total = Counter(
     "pinescript_tool_calls_total",
     "Total MCP tool calls",
-    ["tool"],
+    ["tool", "transport"],
     registry=METRICS_REGISTRY,
 )
 tool_errors_total = Counter(
     "pinescript_tool_errors_total",
     "Tool calls that raised exceptions",
-    ["tool"],
+    ["tool", "transport"],
     registry=METRICS_REGISTRY,
 )
 tool_duration_seconds = Histogram(
     "pinescript_tool_duration_seconds",
     "Tool call duration in seconds",
-    ["tool"],
+    ["tool", "transport"],
     buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
     registry=METRICS_REGISTRY,
 )
@@ -106,6 +106,9 @@ class ResolveResult(BaseModel):
     query: str
     suggestion: str
 
+# Transport mode — set in main(), used by _timed_tool for metrics labels
+_TRANSPORT = "stdio"
+
 # Initialize MCP server
 mcp = FastMCP("pinescript-docs")
 
@@ -154,10 +157,10 @@ class _timed_tool:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self._start
-        tool_calls_total.labels(tool=self._tool_name).inc()
-        tool_duration_seconds.labels(tool=self._tool_name).observe(duration)
+        tool_calls_total.labels(tool=self._tool_name, transport=_TRANSPORT).inc()
+        tool_duration_seconds.labels(tool=self._tool_name, transport=_TRANSPORT).observe(duration)
         if exc_type is not None:
-            tool_errors_total.labels(tool=self._tool_name).inc()
+            tool_errors_total.labels(tool=self._tool_name, transport=_TRANSPORT).inc()
         log_data = {
             "event": "tool_call",
             "tool": self._tool_name,
@@ -1013,12 +1016,28 @@ def _lint_pine(code: str) -> list[dict]:
                 })
 
         # --- Rule E015: Mismatched string quotes ---
-        # Check for strings that start with one quote type but don't close properly
-        single_quotes = stripped.count("'") - stripped.count("\\'")
-        double_quotes = stripped.count('"') - stripped.count('\\"')
-        if single_quotes % 2 != 0 or double_quotes % 2 != 0:
-            # Skip if it's a comment line or inside a multi-line string context
-            if not stripped.startswith("//"):
+        # Walk the line tracking string state to detect truly unclosed strings.
+        # Pine Script supports both single and double quoted strings.
+        if not stripped.startswith("//"):
+            in_string = False
+            string_char = None
+            j = 0
+            while j < len(stripped):
+                ch = stripped[j]
+                if in_string:
+                    if ch == '\\' and j + 1 < len(stripped):
+                        j += 2  # skip escaped character
+                        continue
+                    if ch == string_char:
+                        in_string = False
+                else:
+                    if ch == '/' and j + 1 < len(stripped) and stripped[j + 1] == '/':
+                        break  # rest of line is a comment
+                    if ch in ('"', "'"):
+                        in_string = True
+                        string_char = ch
+                j += 1
+            if in_string:
                 issues.append({
                     "line": i,
                     "rule": "E015_mismatched_quotes",
@@ -1060,10 +1079,14 @@ def _lint_pine(code: str) -> list[dict]:
         # Skip empty lines and regular comments (but not annotations like //@)
         if not stripped_line or (stripped_line.startswith("//") and not stripped_line.startswith("//@")):
             continue
-        # Check if this first significant line is a version declaration
+        # Check if this line is a version declaration
         if stripped_line.startswith("//@version="):
             version_found = True
-        break  # Only check the first significant line
+            break
+        # Skip other //@annotations (e.g., //@description, //@function, //@param)
+        if stripped_line.startswith("//@"):
+            continue
+        break  # First real code line — version should have appeared by now
 
     if not version_found:
         issues.insert(0, {
@@ -1333,6 +1356,8 @@ def main():
     args = parser.parse_args()
 
     if args.http:
+        global _TRANSPORT
+        _TRANSPORT = "http"
         from fastmcp.server.transforms.search import BM25SearchTransform
         mcp.add_transform(BM25SearchTransform(
             max_results=10,
