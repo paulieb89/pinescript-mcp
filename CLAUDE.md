@@ -12,6 +12,12 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 - `.bumpversion.toml` - Version sync (pyproject.toml, __init__.py, server.json, mcp.json)
 - `fly.toml` - Fly.io deployment config + `[metrics]` for Prometheus scraping
 
+## .gitignore - Files exist that you may not see;
+
+- .claude/ 
+- reddit/
+- dist/
+
 ## MCP Tools (10 total)
 
 | Tool | Purpose |

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.6.5 → v0.6.7
+
+### Fixed: E016 duplicating E005/E006 on deprecated v5 functions
+
+`_lint_undeclared` now accepts `pattern_issues` and suppresses identifiers already flagged by other rules. When `study()` triggers E005 and `security()` triggers E006, E016 no longer adds redundant "'study' is used but never declared" noise. Typical v5 script drops from 5 issues to 3.
+
+Extraction is message-based — parses the function name from `"study() does not exist..."` style messages via `msg.split("(")[0]`. No hardcoded rule-to-identifier mapping needed.
+
 ## v0.6.4 → v0.6.5
 
 ### Added: E016_undeclared_identifier lint rule

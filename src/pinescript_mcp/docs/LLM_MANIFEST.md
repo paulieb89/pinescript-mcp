@@ -23,11 +23,11 @@
 - `get_functions(namespace)` — lists all functions in a namespace (e.g. `"ta"`, `"strategy"`)
 - `lint_script(script)` — static analysis, free, no API cost
 
-**Always lint generated scripts before presenting them to the user.**
-Call `lint_script` on any Pine Script you write or modify. Fix all errors
-and re-lint until clean before responding. The linter catches issues
-(undeclared identifiers, hallucinated functions, deprecated syntax) that
-you can fix immediately from context — don't pass broken code to the user.
+**Read docs first, lint last.** When writing Pine Script, consult the
+relevant docs before coding. Once the script is complete, call
+`lint_script` once before presenting it to the user. Fix any errors
+and re-lint until clean. Don't skip the docs — the linter catches
+syntax issues, not logic errors or missed API features.
 
 ---
 
