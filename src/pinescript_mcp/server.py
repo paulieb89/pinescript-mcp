@@ -50,10 +50,17 @@ tool_duration_seconds = Histogram(
     registry=METRICS_REGISTRY,
 )
 
-# Optional: pynescript for AST-based syntax validation
+# Optional: pynescript for AST-based syntax and semantic validation
 try:
     from pynescript.ast import parse as pine_parse
     from pynescript.ast.error import SyntaxError as PineSyntaxError
+    from pynescript.ast import (
+        walk as pine_walk,
+        Name, Assign, FunctionDef, TypeDef, EnumDef,
+        ForTo, ForIn, Param, Attribute, Load,
+    )
+    from pynescript.ast import Import as PineImport
+    from pynescript.ast import Tuple as PineTuple
     HAS_PYNESCRIPT = True
 except ImportError:
     HAS_PYNESCRIPT = False
@@ -221,6 +228,44 @@ def _load_functions() -> tuple[set, set, set]:
 
 
 PINE_V6_FUNCTIONS, PINE_V6_NAMESPACES, PINE_V6_TOPLEVEL = _load_functions()
+
+# ---------------------------------------------------------------------------
+# Built-in identifiers for undeclared-identifier detection (E016)
+# ---------------------------------------------------------------------------
+
+# Bare variables that are built-in (many overlap with TOPLEVEL, that's fine)
+_BUILTIN_VARIABLES = {
+    "open", "high", "low", "close", "volume",
+    "hl2", "hlc3", "hlcc4", "ohlc4",
+    "bar_index", "last_bar_index", "last_bar_time",
+    "time", "time_close", "time_tradingday", "timenow",
+    "na", "true", "false",
+    "ask", "bid",
+    "dayofmonth", "dayofweek", "hour", "minute", "month",
+    "second", "weekofyear", "year",
+}
+
+# Namespace roots — appear as Name nodes in Attribute access (ta.sma, barstate.isrealtime)
+_BUILTIN_NS_ROOTS = (
+    {ns.split(".")[0] for ns in PINE_V6_NAMESPACES}
+    | {
+        "adjustment", "alert", "backadjustment", "barmerge", "barstate",
+        "chart", "currency", "dayofweek", "display", "dividends", "earnings",
+        "extend", "font", "format", "hline", "location", "order", "plot",
+        "position", "scale", "session", "settlement_as_close", "shape",
+        "size", "splits", "text", "xloc", "yloc",
+    }
+)
+
+# Type keywords — appear as Name(ctx=Load) in type annotations and declarations
+_PINE_TYPE_KEYWORDS = {
+    "float", "int", "bool", "string", "color",
+    "line", "label", "box", "table", "array", "matrix", "map",
+}
+
+PINE_V6_BUILTIN_IDENTIFIERS = (
+    PINE_V6_TOPLEVEL | _BUILTIN_VARIABLES | _BUILTIN_NS_ROOTS | _PINE_TYPE_KEYWORDS
+)
 
 # Documentation index with descriptions
 DOCS = {
@@ -1045,6 +1090,106 @@ def _lint_pine(code: str) -> list[dict]:
     return issues
 
 
+def _lint_undeclared(code: str) -> list[dict]:
+    """Walk the pynescript AST to find identifiers used but never declared.
+
+    Uses flat scope (no nesting analysis) — all declarations are visible
+    everywhere. This is conservative: may miss some true errors in nested
+    scopes but avoids false positives.
+    """
+    if not HAS_PYNESCRIPT:
+        return []
+
+    try:
+        tree = pine_parse(code)
+    except Exception:
+        return []  # parse errors handled by _lint_syntax
+
+    all_nodes = list(pine_walk(tree))
+
+    # --- Pass 1: collect declared identifiers ---
+    declared = set()
+
+    for node in all_nodes:
+        if isinstance(node, Assign):
+            if isinstance(node.target, Name):
+                declared.add(node.target.id)
+            elif isinstance(node.target, PineTuple):
+                for elt in getattr(node.target, "elts", []):
+                    if isinstance(elt, Name):
+                        declared.add(elt.id)
+
+        elif isinstance(node, FunctionDef):
+            declared.add(node.name)
+            for p in (node.args or []):
+                if isinstance(p, Param) and getattr(p, "name", None):
+                    declared.add(p.name)
+
+        elif isinstance(node, TypeDef):
+            declared.add(node.name)
+
+        elif isinstance(node, EnumDef):
+            declared.add(node.name)
+
+        elif isinstance(node, PineImport):
+            declared.add(node.alias or node.name)
+
+        elif isinstance(node, ForTo):
+            if isinstance(node.target, Name):
+                declared.add(node.target.id)
+
+        elif isinstance(node, ForIn):
+            if isinstance(node.target, Name):
+                declared.add(node.target.id)
+            elif isinstance(node.target, PineTuple):
+                for elt in getattr(node.target, "elts", []):
+                    if isinstance(elt, Name):
+                        declared.add(elt.id)
+
+    # --- Build suppression set: Name nodes used as BUILTIN Attribute prefixes ---
+    # e.g., `ta` in `ta.sma(...)` — suppress that specific Name instance
+    # User objects like `g_levels.high` should NOT be suppressed
+    suppress_ids = set()
+    for node in all_nodes:
+        if isinstance(node, Attribute) and isinstance(node.value, Name):
+            if node.value.id in _BUILTIN_NS_ROOTS:
+                suppress_ids.add(id(node.value))
+
+    # --- Pass 2: check Load-context Name nodes ---
+    issues = []
+    seen = set()  # (name, line) dedup
+
+    for node in all_nodes:
+        if not isinstance(node, Name):
+            continue
+        if not isinstance(node.ctx, Load):
+            continue
+
+        name = node.id
+        line = getattr(node, "lineno", None) or 0
+
+        if id(node) in suppress_ids:
+            continue
+        if name in declared:
+            continue
+        if name in PINE_V6_BUILTIN_IDENTIFIERS:
+            continue
+
+        key = (name, line)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        issues.append({
+            "line": line,
+            "rule": "E016_undeclared_identifier",
+            "message": f"'{name}' is used but never declared. Check spelling or add a declaration.",
+            "severity": "warning",
+        })
+
+    return issues
+
+
 @mcp.tool(
     tags={"validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False},
@@ -1077,7 +1222,8 @@ async def lint_script(script: str) -> LintResult:
     with _timed_tool("lint_script", script_length=len(script)) as log:
         syntax_issues = _lint_syntax(script)
         pattern_issues = _lint_pine(script)
-        raw_issues = syntax_issues + pattern_issues
+        undeclared_issues = _lint_undeclared(script) if not syntax_issues else []
+        raw_issues = syntax_issues + pattern_issues + undeclared_issues
         issues = [LintIssue(**issue) for issue in raw_issues]
         log["issues_found"] = len(issues)
 

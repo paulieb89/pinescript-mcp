@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## v0.6.4 → v0.6.5
+
+### Added: E016_undeclared_identifier lint rule
+
+New AST-based lint rule that walks the pynescript parse tree to detect identifiers used but never declared. Catches the #1 gap in the linter — TradingView's `Undeclared identifier "x"` errors that previously passed through undetected.
+
+- Collects declarations from: assignments, function params, for loops, imports, UDTs, enums
+- Built-in suppression: 750+ identifiers (variables, namespaces, type keywords, constants)
+- Only suppresses attribute prefixes for known builtins — user objects like `g_levels.high` still checked
+- Skipped when syntax errors exist (avoids cascading false positives)
+- Severity: `warning` (flat scope analysis, conservative)
+
+### Added: Manifest lint-before-deliver instruction
+
+LLM_MANIFEST.md now instructs Claude to always call `lint_script` on generated Pine Script before presenting it to the user. Creates a self-correction loop: write → lint → fix → re-lint → deliver clean code.
+
 ## v0.6.3 → v0.6.4
 
 ### Added: Repainting routing example in manifest
