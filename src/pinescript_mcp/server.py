@@ -677,10 +677,10 @@ are injected upfront. Use this pattern:
 2. `call_tool(name, arguments)` — execute any discovered tool
 
 **Quick reference:**
-- `call_tool("resolve_topic", {"query": "ta.rsi"})` — keyword lookup
+- `resolve_topic(query)` — already available directly, use for exact API terms
 - `call_tool("get_doc", {"path": "concepts/timeframes.md"})` — read a doc
-- `call_tool("lint_script", {"script": "..."})` — already available directly
 - `call_tool("search_docs", {"query": "str.format"})` — grep docs
+- `call_tool("lint_script", {"script": "..."})` — lint after writing
 
 ---
 
@@ -1350,7 +1350,7 @@ def main():
         from fastmcp.server.transforms.search import BM25SearchTransform
         mcp.add_transform(BM25SearchTransform(
             max_results=10,
-            always_visible=["get_manifest", "lint_script"],
+            always_visible=["get_manifest", "resolve_topic"],
         ))
         mcp.run(transport="http", host=args.host, port=args.port)
     else:
