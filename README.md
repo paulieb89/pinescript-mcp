@@ -77,7 +77,7 @@ Documentation is bundled in the package - each version contains a frozen snapsho
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.6.9"]
+      "args": ["pinescript-mcp==0.6.10"]
     }
   }
 }
@@ -90,7 +90,7 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 If you prefer pip over uvx:
 
 ```bash
-pip install pinescript-mcp==0.6.9
+pip install pinescript-mcp==0.6.10
 ```
 
 Note: `"command": "pinescript-mcp"` only works if the install location is in your PATH. The `uvx` method above is more reliable as it handles environments automatically.
