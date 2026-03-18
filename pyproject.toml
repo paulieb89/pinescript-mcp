@@ -24,7 +24,6 @@ classifiers = [
 dependencies = [
     "fastmcp>=3.1.0",
     "uvicorn>=0.27.0",
-    "py-key-value-aio[disk]>=0.4.0",  # DiskStore for persistent caching
     "pynescript>=0.3.0",  # Pine Script AST parser for syntax validation
     "prometheus_client>=0.21.0",  # Metrics for Fly.io Grafana
 ]

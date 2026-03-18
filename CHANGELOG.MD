@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.6.7 → v0.6.8
+
+### Removed: ResponseCachingMiddleware
+
+`/tmp` on Fly.io is tmpfs (in-memory), so the DiskStore "disk" cache was actually writing serialized responses to RAM — doubling memory usage for cached docs with no latency benefit (file reads are <1ms). Memory on the 256MB VM was climbing to 436-456 MiB.
+
+Removed: `ResponseCachingMiddleware`, `DiskStore`, `CACHE_DIR`, and `py-key-value-aio` dependency. Middleware stack is now: rate limiting → structured logging → response limiting (3 layers, was 4).
+
 ## v0.6.5 → v0.6.7
 
 ### Fixed: E016 duplicating E005/E006 on deprecated v5 functions
