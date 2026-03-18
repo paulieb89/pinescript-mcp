@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pinescript-mcp"
-version = "0.6.10"
+version = "0.6.11"
 description = "MCP server providing Pine Script v6 documentation for AI assistants"
 readme = "README.md"
 license = "MIT"
