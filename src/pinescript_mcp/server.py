@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from fastmcp.server.middleware.caching import ResponseCachingMiddleware, CallToolSettings
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
@@ -606,7 +606,7 @@ async def search_docs(query: str, max_results: int = 10):
     tags={"reference", "discovery"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_manifest():
+async def get_manifest(ctx: Context):
     """START HERE for natural language Pine Script questions.
 
     Returns the LLM_MANIFEST.md — a routing guide that maps topics
@@ -617,9 +617,32 @@ async def get_manifest():
     """
     with _timed_tool("get_manifest"):
         manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
-        if manifest_path.exists():
-            return manifest_path.read_text(encoding="utf-8")
-        return "Error: LLM_MANIFEST.md not found"
+        if not manifest_path.exists():
+            return "Error: LLM_MANIFEST.md not found"
+
+        content = manifest_path.read_text(encoding="utf-8")
+
+        if ctx.transport == "streamable-http":
+            http_preamble = """## Tool Discovery (claude.ai / HTTP clients)
+
+You are connected via HTTP. Tools are discovered on demand — not all schemas
+are injected upfront. Use this pattern:
+
+1. `search_tools(query)` — find tools by name or description
+2. `call_tool(name, arguments)` — execute any discovered tool
+
+**Quick reference:**
+- `call_tool("resolve_topic", {"query": "ta.rsi"})` — keyword lookup
+- `call_tool("get_doc", {"path": "concepts/timeframes.md"})` — read a doc
+- `call_tool("lint_script", {"script": "..."})` — already available directly
+- `call_tool("search_docs", {"query": "str.format"})` — grep docs
+
+---
+
+"""
+            return http_preamble + content
+
+        return content
 
 
 @mcp.tool(
