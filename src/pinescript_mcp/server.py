@@ -31,19 +31,19 @@ METRICS_REGISTRY = CollectorRegistry()
 tool_calls_total = Counter(
     "pinescript_tool_calls_total",
     "Total MCP tool calls",
-    ["tool", "transport"],
+    ["tool", "transport", "region"],
     registry=METRICS_REGISTRY,
 )
 tool_errors_total = Counter(
     "pinescript_tool_errors_total",
     "Tool calls that raised exceptions",
-    ["tool", "transport"],
+    ["tool", "transport", "region"],
     registry=METRICS_REGISTRY,
 )
 tool_duration_seconds = Histogram(
     "pinescript_tool_duration_seconds",
     "Tool call duration in seconds",
-    ["tool", "transport"],
+    ["tool", "transport", "region"],
     buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
     registry=METRICS_REGISTRY,
 )
@@ -106,8 +106,10 @@ class ResolveResult(BaseModel):
     query: str
     suggestion: str
 
-# Transport mode — set in main(), used by _timed_tool for metrics labels
-_TRANSPORT = "stdio"
+# Transport + region — inferred from environment, used by _timed_tool for metrics labels
+# Fly.io sets FLY_REGION automatically; "streamable-http" matches ctx.transport literal
+_FLY_REGION = os.getenv("FLY_REGION", "local")
+_TRANSPORT = os.getenv("MCP_TRANSPORT", "streamable-http" if os.getenv("FLY_REGION") else "stdio")
 
 # Initialize MCP server
 mcp = FastMCP("pinescript-docs")
@@ -157,10 +159,10 @@ class _timed_tool:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self._start
-        tool_calls_total.labels(tool=self._tool_name, transport=_TRANSPORT).inc()
-        tool_duration_seconds.labels(tool=self._tool_name, transport=_TRANSPORT).observe(duration)
+        tool_calls_total.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).inc()
+        tool_duration_seconds.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).observe(duration)
         if exc_type is not None:
-            tool_errors_total.labels(tool=self._tool_name, transport=_TRANSPORT).inc()
+            tool_errors_total.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).inc()
         log_data = {
             "event": "tool_call",
             "tool": self._tool_name,
@@ -300,6 +302,26 @@ DOCS = {
     # Migration
     "reference/migration_v5_to_v6.md": "v5 to v6 migration guide, breaking changes, renamed functions",
 }
+
+# ---------------------------------------------------------------------------
+# Doc Content Cache — lazy-loaded, in-memory, bounded (~1.3 MB for 36 files)
+# Invalidated only by deploy (new process). Static content, no stale risk.
+# ---------------------------------------------------------------------------
+_DOC_LINES_CACHE: dict[str, list[str]] = {}
+
+
+def _get_doc_lines(rel_path: str) -> list[str]:
+    """Return doc file as list of lines, cached after first read."""
+    if rel_path not in _DOC_LINES_CACHE:
+        full_path = DOCS_ROOT / rel_path
+        _DOC_LINES_CACHE[rel_path] = full_path.read_text(encoding="utf-8").splitlines() if full_path.exists() else []
+    return _DOC_LINES_CACHE[rel_path]
+
+
+def _get_doc_content(rel_path: str) -> str:
+    """Return doc file as a single string, cached after first read."""
+    return "\n".join(_get_doc_lines(rel_path))
+
 
 # Topic mapping for resolve_topic() — exact Pine Script API terms only.
 # Natural language routing is handled by the LLM reading get_manifest().
@@ -500,8 +522,8 @@ async def list_sections(path: str):
     """
     with _timed_tool("list_sections", path=path) as log:
         try:
-            full_path = _validate_path(path)
-            content = full_path.read_text(encoding="utf-8")
+            _validate_path(path)  # check path is allowed
+            content = _get_doc_content(path)
             headers = [line for line in content.splitlines()
                        if line.startswith("#") and not line.startswith("###")]
             log["headers_found"] = len(headers)
@@ -535,8 +557,8 @@ async def get_doc(path: str, limit: int = 0, offset: int = 0):
 
     with _timed_tool("get_doc", path=path, limit=limit, offset=offset) as log:
         try:
-            full_path = _validate_path(path)
-            content = full_path.read_text(encoding="utf-8")
+            _validate_path(path)  # check path is allowed
+            content = _get_doc_content(path)
             total = len(content)
 
             if limit > 0:
@@ -575,8 +597,8 @@ async def get_section(path: str, header: str, include_children: bool = True):
     """
     with _timed_tool("get_section", path=path, header=header) as log:
         try:
-            full_path = _validate_path(path)
-            content = full_path.read_text(encoding="utf-8")
+            _validate_path(path)  # check path is allowed
+            content = _get_doc_content(path)
             section, start_line, end_line = _find_section(content, header, include_children)
             return f"# {path} (lines {start_line}-{end_line})\n\n{section}"
         except ValueError as e:
@@ -588,50 +610,77 @@ async def get_section(path: str, header: str, include_children: bool = True):
     tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def search_docs(query: str, max_results: int = 10):
-    """Grep for an exact string across all Pine Script v6 documentation.
+async def search_docs(query: str, max_results: int = 5):
+    """Search Pine Script v6 documentation and return matching sections.
 
-    Use this for specific function names, syntax, or code patterns (e.g., "ta.sma", "strategy.exit").
-    For natural language questions, use get_manifest() for routing guidance.
+    Finds sections containing the query and returns previews with
+    get_section() call hints so you can read the full content.
 
     Args:
-        query: Exact string to search for (case-insensitive). Use single terms, not phrases.
-        max_results: Maximum number of results to return (default: 10)
+        query: Exact string to search for (case-insensitive).
+        max_results: Maximum sections to return (default: 5)
 
-    Returns matching lines with file paths and line numbers.
+    Returns matching sections ranked by relevance with get_section() hints.
     """
     with _timed_tool("search_docs", query=query, max_results=max_results) as log:
-        all_results = []
         pattern = re.compile(re.escape(query), re.IGNORECASE)
+        section_hits = []
 
         for rel_path in DOCS.keys():
-            full_path = DOCS_ROOT / rel_path
-            if not full_path.exists():
-                continue
-            try:
-                lines = full_path.read_text(encoding="utf-8").splitlines()
-                for i, line in enumerate(lines, 1):
-                    if pattern.search(line):
-                        all_results.append({
-                            "file": rel_path,
-                            "line": i,
-                            "content": line.strip()[:200],
-                            "is_header": 1 if line.strip().startswith("#") else 0
-                        })
-            except Exception:
+            lines = _get_doc_lines(rel_path)
+            if not lines:
                 continue
 
-        all_results.sort(key=lambda r: (-r["is_header"], r["file"], r["line"]))
-        results = all_results[:max_results]
+            current_start = 0
+            current_header = "(preamble)"
+            current_level = 0
+
+            for i, line in enumerate(lines):
+                header_match = re.match(r'^(#+)\s*(.+)', line)
+                if header_match:
+                    # Close previous section — check for hits
+                    section_lines = lines[current_start:i]
+                    match_count = sum(1 for l in section_lines if pattern.search(l))
+                    if match_count and current_header != "(preamble)":
+                        section_hits.append({
+                            "file": rel_path,
+                            "header": current_header,
+                            "level": current_level,
+                            "matches": match_count,
+                            "preview": "\n".join(section_lines[:30]),
+                        })
+                    # Open new section
+                    current_header = header_match.group(2).strip()
+                    current_level = len(header_match.group(1))
+                    current_start = i
+
+            # Final section
+            section_lines = lines[current_start:]
+            match_count = sum(1 for l in section_lines if pattern.search(l))
+            if match_count and current_header != "(preamble)":
+                section_hits.append({
+                    "file": rel_path,
+                    "header": current_header,
+                    "level": current_level,
+                    "matches": match_count,
+                    "preview": "\n".join(section_lines[:30]),
+                })
+
+        # Sort: more matches first, then prefer ## over ###
+        section_hits.sort(key=lambda x: (-x["matches"], x["level"]))
+        results = section_hits[:max_results]
         log["results_found"] = len(results)
 
         if not results:
             return f"No results found for: {query}"
 
-        output = [f"# Search results for: {query}", f"Found {len(results)} matches", ""]
+        output = [f"# Search results for: {query}", f"Found {len(results)} matching sections", ""]
         for r in results:
-            output.append(f"**{r['file']}:{r['line']}**")
-            output.append(f"  {r['content']}")
+            output.append(f"## {r['file']} → {r['header']}")
+            output.append(f"Use: get_section(\"{r['file']}\", \"{r['header']}\")")
+            output.append(f"({r['matches']} matches)")
+            output.append("")
+            output.append(r["preview"])
             output.append("")
         return "\n".join(output)
 
@@ -650,11 +699,9 @@ async def get_manifest(ctx: Context):
     query is a natural language question rather than an exact API term.
     """
     with _timed_tool("get_manifest"):
-        manifest_path = DOCS_ROOT / "LLM_MANIFEST.md"
-        if not manifest_path.exists():
+        content = _get_doc_content("LLM_MANIFEST.md")
+        if not content:
             return "Error: LLM_MANIFEST.md not found"
-
-        content = manifest_path.read_text(encoding="utf-8")
 
         if ctx.transport == "streamable-http":
             http_preamble = """## Tool Discovery (claude.ai / HTTP clients)
@@ -885,6 +932,7 @@ def _lint_pine(code: str) -> list[dict]:
     """
     issues = []
     lines = code.split("\n")
+    _in_strategy = False
 
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
@@ -892,6 +940,10 @@ def _lint_pine(code: str) -> list[dict]:
         # Skip comments and empty lines
         if not stripped or stripped.startswith("//"):
             continue
+
+        # Track strategy declaration for E007 (O(1) instead of scanning backwards)
+        if not _in_strategy and re.search(r'\bstrategy\s*\(', stripped):
+            _in_strategy = True
 
         # --- Rule E001: input.enum() with const string constants ---
         if re.search(r'input\.enum\s*\(', stripped):
@@ -935,20 +987,13 @@ def _lint_pine(code: str) -> list[dict]:
             })
 
         # --- Rule E007: alertcondition() in strategy ---
-        if re.search(r'\balertcondition\s*\(', stripped):
-            for prev_line in lines[:i]:
-                # Skip comment lines when checking for strategy declaration
-                prev_stripped = prev_line.strip()
-                if prev_stripped.startswith("//"):
-                    continue
-                if re.search(r'\bstrategy\s*\(', prev_stripped):
-                    issues.append({
-                        "line": i,
-                        "rule": "E007_alertcondition_in_strategy",
-                        "message": "alertcondition() only works in indicator() scripts. Strategies must use alert() with alert.freq_once_per_bar_close.",
-                        "severity": "error"
-                    })
-                    break
+        if _in_strategy and re.search(r'\balertcondition\s*\(', stripped):
+            issues.append({
+                "line": i,
+                "rule": "E007_alertcondition_in_strategy",
+                "message": "alertcondition() only works in indicator() scripts. Strategies must use alert() with alert.freq_once_per_bar_close.",
+                "severity": "error"
+            })
 
         # --- Rule E009: format.currency (doesn't exist) ---
         if re.search(r'\bformat\.currency\b', stripped):
@@ -1062,8 +1107,8 @@ def _lint_pine(code: str) -> list[dict]:
         var_match = re.match(r'^var\s+(?:int|float|bool|string|color|line|box|label|table)?\s*(\w+)\s*=', stripped)
         if var_match:
             var_name = var_match.group(1)
-            # Check if variable appears elsewhere in code (simple check)
-            var_usage_count = code.count(var_name)
+            # Check if variable appears elsewhere in code (word-boundary match)
+            var_usage_count = len(re.findall(rf'\b{re.escape(var_name)}\b', code))
             if var_usage_count == 1:  # Only the declaration
                 issues.append({
                     "line": i,
@@ -1125,90 +1170,91 @@ def _lint_undeclared(code: str, pattern_issues: list[dict] | None = None) -> lis
         return []  # parse errors handled by _lint_syntax
 
     all_nodes = list(pine_walk(tree))
-
-    # --- Pass 1: collect declared identifiers ---
     declared = set()
-
-    for node in all_nodes:
-        if isinstance(node, Assign):
-            if isinstance(node.target, Name):
-                declared.add(node.target.id)
-            elif isinstance(node.target, PineTuple):
-                for elt in getattr(node.target, "elts", []):
-                    if isinstance(elt, Name):
-                        declared.add(elt.id)
-
-        elif isinstance(node, FunctionDef):
-            declared.add(node.name)
-            for p in (node.args or []):
-                if isinstance(p, Param) and getattr(p, "name", None):
-                    declared.add(p.name)
-
-        elif isinstance(node, TypeDef):
-            declared.add(node.name)
-
-        elif isinstance(node, EnumDef):
-            declared.add(node.name)
-
-        elif isinstance(node, PineImport):
-            declared.add(node.alias or node.name)
-
-        elif isinstance(node, ForTo):
-            if isinstance(node.target, Name):
-                declared.add(node.target.id)
-
-        elif isinstance(node, ForIn):
-            if isinstance(node.target, Name):
-                declared.add(node.target.id)
-            elif isinstance(node.target, PineTuple):
-                for elt in getattr(node.target, "elts", []):
-                    if isinstance(elt, Name):
-                        declared.add(elt.id)
-
-    # --- Build suppression set: Name nodes used as BUILTIN Attribute prefixes ---
-    # e.g., `ta` in `ta.sma(...)` — suppress that specific Name instance
-    # User objects like `g_levels.high` should NOT be suppressed
     suppress_ids = set()
-    for node in all_nodes:
-        if isinstance(node, Attribute) and isinstance(node.value, Name):
-            if node.value.id in _BUILTIN_NS_ROOTS:
-                suppress_ids.add(id(node.value))
-
-    # --- Pass 2: check Load-context Name nodes ---
     issues = []
     seen = set()  # (name, line) dedup
 
-    for node in all_nodes:
-        if not isinstance(node, Name):
-            continue
-        if not isinstance(node.ctx, Load):
-            continue
+    try:
+        # --- Pass 1: collect declared identifiers ---
+        for node in all_nodes:
+            if isinstance(node, Assign):
+                if isinstance(node.target, Name):
+                    declared.add(node.target.id)
+                elif isinstance(node.target, PineTuple):
+                    for elt in getattr(node.target, "elts", []):
+                        if isinstance(elt, Name):
+                            declared.add(elt.id)
 
-        name = node.id
-        line = getattr(node, "lineno", None) or 0
+            elif isinstance(node, FunctionDef):
+                declared.add(node.name)
+                for p in (node.args or []):
+                    if isinstance(p, Param) and getattr(p, "name", None):
+                        declared.add(p.name)
 
-        if id(node) in suppress_ids:
-            continue
-        if name in declared:
-            continue
-        if name in PINE_V6_BUILTIN_IDENTIFIERS:
-            continue
-        if name in _already_flagged:
-            continue
+            elif isinstance(node, TypeDef):
+                declared.add(node.name)
 
-        key = (name, line)
-        if key in seen:
-            continue
-        seen.add(key)
+            elif isinstance(node, EnumDef):
+                declared.add(node.name)
 
-        issues.append({
-            "line": line,
-            "rule": "E016_undeclared_identifier",
-            "message": f"'{name}' is used but never declared. Check spelling or add a declaration.",
-            "severity": "warning",
-        })
+            elif isinstance(node, PineImport):
+                declared.add(node.alias or node.name)
 
-    return issues
+            elif isinstance(node, ForTo):
+                if isinstance(node.target, Name):
+                    declared.add(node.target.id)
+
+            elif isinstance(node, ForIn):
+                if isinstance(node.target, Name):
+                    declared.add(node.target.id)
+                elif isinstance(node.target, PineTuple):
+                    for elt in getattr(node.target, "elts", []):
+                        if isinstance(elt, Name):
+                            declared.add(elt.id)
+
+        # --- Build suppression set: Name nodes used as BUILTIN Attribute prefixes ---
+        # e.g., `ta` in `ta.sma(...)` — suppress that specific Name instance
+        # User objects like `g_levels.high` should NOT be suppressed
+        for node in all_nodes:
+            if isinstance(node, Attribute) and isinstance(node.value, Name):
+                if node.value.id in _BUILTIN_NS_ROOTS:
+                    suppress_ids.add(id(node.value))
+
+        # --- Pass 2: check Load-context Name nodes ---
+        for node in all_nodes:
+            if not isinstance(node, Name):
+                continue
+            if not isinstance(node.ctx, Load):
+                continue
+
+            name = node.id
+            line = getattr(node, "lineno", None) or 0
+
+            if id(node) in suppress_ids:
+                continue
+            if name in declared:
+                continue
+            if name in PINE_V6_BUILTIN_IDENTIFIERS:
+                continue
+            if name in _already_flagged:
+                continue
+
+            key = (name, line)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            issues.append({
+                "line": line,
+                "rule": "E016_undeclared_identifier",
+                "message": f"'{name}' is used but never declared. Check spelling or add a declaration.",
+                "severity": "warning",
+            })
+
+        return issues
+    finally:
+        del tree, all_nodes, suppress_ids
 
 
 @mcp.tool(
@@ -1356,8 +1402,6 @@ def main():
     args = parser.parse_args()
 
     if args.http:
-        global _TRANSPORT
-        _TRANSPORT = "http"
         from fastmcp.server.transforms.search import BM25SearchTransform
         mcp.add_transform(BM25SearchTransform(
             max_results=10,
