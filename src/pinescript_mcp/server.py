@@ -1402,12 +1402,36 @@ def main():
     args = parser.parse_args()
 
     if args.http:
+        import asyncio
+        import uvicorn
         from fastmcp.server.transforms.search import BM25SearchTransform
+
         mcp.add_transform(BM25SearchTransform(
             max_results=10,
             always_visible=["get_manifest", "resolve_topic"],
         ))
-        mcp.run(transport="http", host=args.host, port=args.port)
+
+        # Serve both transports on the same port:
+        #   streamable-http at /mcp  (Claude.ai, modern clients)
+        #   SSE at /sse + /messages/ (Cursor, Cline, Windsurf, ChatGPT)
+        streamable_app = mcp.http_app(transport="http")
+        sse_app = mcp.http_app(transport="sse")
+
+        async def app(scope, receive, send):
+            """ASGI dispatcher: route SSE paths to sse_app, everything else to streamable_app."""
+            if scope["type"] == "lifespan":
+                # Both apps share the same FastMCP instance; one lifespan suffices
+                await streamable_app(scope, receive, send)
+                return
+            path = scope.get("path", "")
+            if path.startswith("/sse") or path.startswith("/messages"):
+                await sse_app(scope, receive, send)
+            else:
+                await streamable_app(scope, receive, send)
+
+        config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+        server = uvicorn.Server(config)
+        asyncio.run(server.serve())
     else:
         mcp.run()
 

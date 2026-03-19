@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.6.14 → v0.6.15
+
+### Added: SSE transport for backward compatibility
+
+HTTP server now serves both transports on the same port:
+- **Streamable-HTTP** at `/mcp` (Claude.ai, modern clients)
+- **SSE** at `/sse` + `/messages/` (Cursor, Cline, Windsurf, ChatGPT)
+
+ASGI path dispatcher routes `/sse` and `/messages/*` to the SSE app, everything else to the streamable-http app. Both share the same FastMCP instance and tools.
+
 ## v0.6.12 → v0.6.14
 
 ### Fixed: `get_section` whitespace matching

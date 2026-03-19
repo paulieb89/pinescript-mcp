@@ -10,9 +10,9 @@ Enables AI to:
 - Understand Pine Script concepts (execution model, repainting, etc.)
 - Generate correct v6 code with proper function references
 
-## Usage with Claude Code
+## Quick Start (stdio)
 
-Add to `.mcp.json` in your project (recommended):
+Works with Claude Code, Claude Desktop, Gemini CLI, and any MCP client that supports stdio:
 
 ```json
 {
@@ -26,43 +26,31 @@ Add to `.mcp.json` in your project (recommended):
 }
 ```
 
-## Usage with Claude Desktop
+## Public Server (No Install Required)
 
-Add to `~/.config/claude/claude_desktop_config.json`:
+No Python or uvx needed — connect directly to the hosted server.
+
+**Streamable-HTTP** (Claude.ai, modern clients):
 
 ```json
 {
   "mcpServers": {
     "pinescript-docs": {
-      "command": "uvx",
-      "args": ["pinescript-mcp"]
+      "type": "http",
+      "url": "https://pinescript-mcp.fly.dev/mcp"
     }
   }
 }
 ```
 
-## Usage with Google Antigravity
-
-Add to `~/.gemini/antigravity/mcp_config.json`:
+**SSE** (Cursor, Cline, Windsurf, ChatGPT):
 
 ```json
 {
   "mcpServers": {
     "pinescript-docs": {
-      "command": "uvx",
-      "args": ["pinescript-mcp"]
-    }
-  }
-}
-```
-
-Or use the public HTTP server (no install):
-
-```json
-{
-  "mcpServers": {
-    "pinescript-docs": {
-      "serverUrl": "https://pinescript-mcp.fly.dev/mcp"
+      "type": "sse",
+      "url": "https://pinescript-mcp.fly.dev/sse"
     }
   }
 }
@@ -84,31 +72,6 @@ Documentation is bundled in the package - each version contains a frozen snapsho
 ```
 
 Without pinning, `uvx pinescript-mcp` gets the latest version.
-
-## Alternative: pip install
-
-If you prefer pip over uvx:
-
-```bash
-pip install pinescript-mcp==0.6.14
-```
-
-Note: `"command": "pinescript-mcp"` only works if the install location is in your PATH. The `uvx` method above is more reliable as it handles environments automatically.
-
-## Public Server (No Install Required)
-
-Connect directly to the hosted server - no Python or uvx needed:
-
-```json
-{
-  "mcpServers": {
-    "pinescript-docs": {
-      "type": "http",
-      "url": "https://pinescript-mcp.fly.dev/mcp/"
-    }
-  }
-}
-```
 
 ## Available Tools (10)
 
@@ -158,34 +121,6 @@ AI models often hallucinate Pine Script functions or use deprecated v5 syntax. T
 - Deprecated syntax from v4/v5
 - Incorrect parameter orders
 - Missing required arguments
-
-## Lint Rules (17 total)
-
-The `lint_script` tool checks for common Pine Script issues without using AI:
-
-| Rule | Type | Description |
-|------|------|-------------|
-| S000 | Warning | AST parser failed (graceful fallback) |
-| S001 | Error | Real syntax errors (via pynescript AST parser) |
-| E001 | Error | `input.enum()` with const string constants |
-| E003 | Error | Return type keyword on function declaration |
-| E005 | Error | `study()` → use `indicator()` |
-| E006 | Error | `security()` → use `request.security()` |
-| E007 | Error | `alertcondition()` in strategy scripts |
-| E009 | Error | `format.currency` doesn't exist |
-| E010 | Error | Direct `na` comparison (use `na()` function) |
-| E012 | Error | Unknown/hallucinated function |
-| E013 | Error | `input.enum()` with options array |
-| E014 | Error | `strategy()` missing title parameter |
-| E015 | Error | Mismatched string quotes |
-| W001 | Warning | Missing `//@version=6` |
-| W003 | Warning | `lookahead_on` without justification |
-| W004 | Warning | High `max_bars_back` value |
-| W005 | Warning | Potentially unused variable |
-
-## Performance
-
-The HTTP server (Fly.io) uses response caching with 1-hour TTL for documentation lookups, making repeated queries very fast.
 
 ## Development
 
