@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## v0.6.12 → v0.6.13
+## v0.6.12 → v0.6.14
 
 ### Fixed: `get_section` whitespace matching
 
