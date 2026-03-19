@@ -65,7 +65,7 @@ Documentation is bundled in the package - each version contains a frozen snapsho
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.6.14"]
+      "args": ["pinescript-mcp==0.6.15"]
     }
   }
 }
