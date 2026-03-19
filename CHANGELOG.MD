@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.6.12 → v0.6.13
+
+### Fixed: `get_section` whitespace matching
+
+Section headers scraped from TradingView contain double spaces (e.g. `The  details`). `_find_section` now collapses whitespace before comparison, so single-space queries from AI agents match correctly.
+
 ## v0.6.7 → v0.6.8
 
 ### Removed: ResponseCachingMiddleware

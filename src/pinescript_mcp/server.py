@@ -393,8 +393,8 @@ def _find_section(content: str, header: str, include_children: bool = True) -> t
     """
     lines = content.splitlines()
 
-    # Normalize header query (strip leading #'s if present)
-    header_text = re.sub(r'^#+\s*', '', header).strip().lower()
+    # Normalize header query (strip leading #'s if present, collapse whitespace)
+    header_text = re.sub(r'\s+', ' ', re.sub(r'^#+\s*', '', header).strip().lower())
 
     start_idx = None
     start_level = None
@@ -405,7 +405,7 @@ def _find_section(content: str, header: str, include_children: bool = True) -> t
             match = re.match(r'^(#+)\s*(.+)', line)
             if match:
                 level = len(match.group(1))
-                text = match.group(2).strip().lower()
+                text = re.sub(r'\s+', ' ', match.group(2).strip().lower())
 
                 if start_idx is None:
                     # Looking for start
