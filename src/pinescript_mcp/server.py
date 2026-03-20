@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastmcp import FastMCP, Context
+from fastmcp.server.context import _current_transport
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
@@ -159,10 +160,11 @@ class _timed_tool:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         duration = time.time() - self._start
-        tool_calls_total.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).inc()
-        tool_duration_seconds.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).observe(duration)
+        transport = _current_transport.get() or _TRANSPORT
+        tool_calls_total.labels(tool=self._tool_name, transport=transport, region=_FLY_REGION).inc()
+        tool_duration_seconds.labels(tool=self._tool_name, transport=transport, region=_FLY_REGION).observe(duration)
         if exc_type is not None:
-            tool_errors_total.labels(tool=self._tool_name, transport=_TRANSPORT, region=_FLY_REGION).inc()
+            tool_errors_total.labels(tool=self._tool_name, transport=transport, region=_FLY_REGION).inc()
         log_data = {
             "event": "tool_call",
             "tool": self._tool_name,
