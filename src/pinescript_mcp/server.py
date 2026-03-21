@@ -15,6 +15,7 @@ from fastmcp.server.context import _current_transport
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from fastmcp.server.transforms import ResourcesAsTools, PromptsAsTools
 from fastmcp.utilities.logging import get_logger
 from pydantic import BaseModel
 import time
@@ -135,7 +136,12 @@ mcp.add_middleware(ResponseLimitingMiddleware(
     max_size=200_000,              # 200KB limit
 ))
 
-
+# ---------------------------------------------------------------------------
+# Transforms — expose resources and prompts as tools for clients that
+# don't natively support MCP resources/prompts (most current LLM clients)
+# ---------------------------------------------------------------------------
+mcp.add_transform(ResourcesAsTools(mcp))
+mcp.add_transform(PromptsAsTools(mcp))
 
 _logger = get_logger("pinescript_mcp.tools")
 
@@ -326,7 +332,7 @@ def _get_doc_content(rel_path: str) -> str:
 
 
 # Topic mapping for resolve_topic() — exact Pine Script API terms only.
-# Natural language routing is handled by the LLM reading get_manifest().
+# Natural language routing is handled by the LLM reading the docs://manifest resource.
 TOPIC_MAP = {
     # Technical Analysis — exact function prefixes
     "ta.rsi": "reference/functions/ta.md",
@@ -688,59 +694,20 @@ async def search_docs(query: str, max_results: int = 5):
 
 
 @mcp.tool(
-    tags={"reference", "discovery"},
-    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
-)
-async def get_manifest(ctx: Context):
-    """START HERE for natural language Pine Script questions.
-
-    Returns the LLM_MANIFEST.md — a routing guide that maps topics
-    to documentation files with tool call sequences for common queries.
-
-    Read this when resolve_topic() returns 0 matches, or when the
-    query is a natural language question rather than an exact API term.
-    """
-    with _timed_tool("get_manifest"):
-        content = _get_doc_content("LLM_MANIFEST.md")
-        if not content:
-            return "Error: LLM_MANIFEST.md not found"
-
-        if ctx.transport == "streamable-http":
-            http_preamble = """## Tool Discovery (claude.ai / HTTP clients)
-
-You are connected via HTTP. Tools are discovered on demand — not all schemas
-are injected upfront. Use this pattern:
-
-1. `search_tools(query)` — find tools by name or description
-2. `call_tool(name, arguments)` — execute any discovered tool
-
-**Quick reference:**
-- `resolve_topic(query)` — already available directly, use for exact API terms
-- `call_tool("get_doc", {"path": "concepts/timeframes.md"})` — read a doc
-- `call_tool("search_docs", {"query": "str.format"})` — grep docs
-- `call_tool("lint_script", {"script": "..."})` — lint after writing
-
----
-
-"""
-            return http_preamble + content
-
-        return content
-
-
-@mcp.tool(
     tags={"reference", "validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
 async def get_functions(namespace: str = ""):
     """Get valid Pine Script v6 functions, optionally filtered by namespace.
 
+    Use before writing Pine Script to see which functions exist.
+    For checking a single function name, use validate_function() instead.
+
     Args:
         namespace: Filter by namespace (e.g., "ta", "strategy", "request").
                    Empty string returns all functions grouped by namespace.
 
-    Returns formatted list of functions. External agents can use this
-    to ground their Pine Script generation and avoid hallucinated functions.
+    Returns a formatted text list of function names.
     """
     with _timed_tool("get_functions", namespace=namespace or "(all)"):
         if not PINE_V6_FUNCTIONS:
@@ -811,15 +778,15 @@ async def resolve_topic(query: str) -> ResolveResult:
     Use for exact function names and Pine Script vocabulary
     (e.g., "ta.rsi", "strategy.entry", "repainting", "request.security").
 
-    For natural language questions, use get_manifest() for routing
-    guidance, then get_doc() or list_sections() + get_section().
+    For natural language questions, read the docs://manifest resource
+    for routing guidance, then use get_doc() or list_sections() + get_section().
 
     Args:
         query: Exact Pine Script term or known concept keyword.
 
     Returns:
         ResolveResult with matched doc paths. If no match, suggestion
-        directs to get_manifest() or search_docs().
+        directs to search_docs().
     """
     with _timed_tool("resolve_topic", query=query) as log:
         query_lower = query.lower()
@@ -843,7 +810,7 @@ async def resolve_topic(query: str) -> ResolveResult:
             return ResolveResult(
                 matches=[],
                 query=query,
-                suggestion="No keyword match. Use get_manifest() for doc routing guidance, or search_docs(query) for exact terms."
+                suggestion="No keyword match. Read the docs://manifest resource for routing guidance, or use search_docs(query) for exact terms."
             )
 
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
@@ -1377,6 +1344,57 @@ Please provide:
 Use the Pine Script v6 documentation to ensure accuracy."""
 
 
+# ---------------------------------------------------------------------------
+# MCP Resources — docs corpus accessible to resource-capable clients
+# ---------------------------------------------------------------------------
+
+@mcp.resource(
+    "docs://manifest",
+    name="LLM Manifest",
+    description="START HERE — routing guide that maps Pine Script questions to documentation files and tool call sequences",
+    mime_type="text/markdown",
+    tags={"discovery"},
+    annotations={"readOnlyHint": True},
+)
+def manifest_resource() -> str:
+    """Returns LLM_MANIFEST.md — the routing guide for Pine Script questions.
+
+    Read this first when handling natural language questions, or when
+    resolve_topic() returns 0 matches.
+    """
+    return _get_doc_content("LLM_MANIFEST.md")
+
+
+@mcp.resource(
+    "docs://functions",
+    name="Pine Script v6 Functions",
+    description="Complete list of valid Pine Script v6 functions as JSON",
+    mime_type="application/json",
+    tags={"reference", "validation"},
+    annotations={"readOnlyHint": True},
+)
+def functions_resource() -> str:
+    """Returns pine_v6_functions.json content."""
+    return FUNCTIONS_JSON.read_text(encoding="utf-8") if FUNCTIONS_JSON.exists() else "{}"
+
+
+@mcp.resource(
+    "docs://{path*}",
+    name="Pine Script Documentation",
+    description="Read any Pine Script v6 doc by path (e.g. 'concepts/timeframes.md', 'reference/functions/ta.md')",
+    mime_type="text/markdown",
+    tags={"reference"},
+    annotations={"readOnlyHint": True},
+)
+def doc_resource(path: str) -> str:
+    """Returns documentation file content by path.
+
+    Uses _validate_path() to ensure path is within allowed directories.
+    """
+    _validate_path(path)
+    return _get_doc_content(path)
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint for container orchestration."""
@@ -1406,18 +1424,13 @@ def main():
     if args.http:
         import asyncio
         import uvicorn
-        from fastmcp.server.transforms.search import BM25SearchTransform
-
-        mcp.add_transform(BM25SearchTransform(
-            max_results=10,
-            always_visible=["get_manifest", "resolve_topic"],
-        ))
 
         # Serve both transports on the same port:
         #   streamable-http at /mcp  (Claude.ai, modern clients)
         #   SSE at /sse + /messages/ (Cursor, Cline, Windsurf, ChatGPT)
-        streamable_app = mcp.http_app(transport="http")
-        sse_app = mcp.http_app(transport="sse")
+        # stateless_http=True: no per-session state — safe for Fly.io multi-instance routing
+        streamable_app = mcp.http_app(transport="http", stateless_http=True)
+        sse_app = mcp.http_app(transport="sse", stateless_http=True)
 
         async def app(scope, receive, send):
             """ASGI dispatcher: route SSE paths to sse_app, everything else to streamable_app."""

@@ -52,9 +52,10 @@ See [README.md](README.md) for the full tools list and user-facing documentation
 ## Architecture
 
 - **Framework:** `fastmcp.FastMCP` ([gofastmcp.com](https://gofastmcp.com)) — not the official `mcp` SDK
-- **Transport:** streamable-http in production (SSE is deprecated)
-- **Middleware:** Rate limiting → structured logging → response limiting → response caching (order matters)
+- **Transport:** Dual — streamable-http at `/mcp` + SSE at `/sse` on same port, `stateless_http=True` for Fly.io multi-instance routing
+- **Middleware:** Rate limiting → structured logging → response limiting (order matters)
+- **Transforms:** `ResourcesAsTools` + `PromptsAsTools` (applied globally, module level) — 4 synthetic tools for clients without native resource/prompt support
+- **Resources:** 3 MCP resources (`docs://manifest`, `docs://functions`, `docs://{path*}`) expose docs corpus directly
 - **Metrics:** Prometheus via `_timed_tool` context manager → `/metrics` endpoint → Fly.io Grafana
 - **Docs loading:** `importlib.resources` at startup, no external fetching
-- **Caching:** `ResponseCachingMiddleware` with 1hr TTL + disk persistence (survives Fly suspend)
 - **DNS rebinding:** Disabled for public server access

@@ -73,11 +73,10 @@ Documentation is bundled in the package - each version contains a frozen snapsho
 
 Without pinning, `uvx pinescript-mcp` gets the latest version.
 
-## Available Tools (10)
+## Available Tools (13)
 
 | Tool | Description |
 |------|-------------|
-| `get_manifest()` | **Start here** for natural language questions — routing guide |
 | `resolve_topic(query)` | Fast lookup for exact API terms (`ta.rsi`, `repainting`) |
 | `search_docs(query)` | Grep for exact strings across all docs |
 | `list_docs()` | List all documentation files with descriptions |
@@ -87,6 +86,10 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 | `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
 | `validate_function(name)` | Check if a function exists in Pine v6 |
 | `lint_script(script)` | Lint Pine Script (17 rules, free, no API cost) |
+| `list_resources()` | Browse available documentation resources |
+| `read_resource(uri)` | Read a doc resource by URI (e.g. `docs://manifest`) |
+| `list_prompts()` | List available prompt templates |
+| `get_prompt(name, arguments)` | Render a prompt template with arguments |
 
 ## Available Prompts
 
@@ -95,6 +98,14 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 | `debug_error(error, code)` | Analyze a Pine Script compilation error |
 | `convert_v5_to_v6(code)` | Convert Pine Script v5 code to v6 syntax |
 | `explain_function(name)` | Explain a Pine Script function in detail |
+
+## Available Resources
+
+| URI | Description |
+|-----|-------------|
+| `docs://manifest` | **Start here** — routing guide for Pine Script questions |
+| `docs://functions` | Complete Pine Script v6 function list (JSON) |
+| `docs://{path}` | Any doc file by path (e.g. `concepts/timeframes.md`) |
 
 ## Example Queries
 

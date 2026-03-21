@@ -156,7 +156,7 @@ syntax issues, not logic errors or missed API features.
 
 These examples show the full tool call sequence, not just the doc to retrieve.
 
-> **HTTP clients:** wrap all tool calls below with `call_tool(name, arguments)` as shown in the Tool Discovery section above.
+> All tools below are available directly — call them by name.
 
 **"What's the ta.rsi() signature?"** — exact API term → resolve_topic
 ```

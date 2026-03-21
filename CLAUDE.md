@@ -18,11 +18,12 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 - reddit/
 - dist/
 
-## MCP Tools (10 total)
+## MCP Surface (13 tools, 3 resources, 3 prompts)
+
+### Tools (9 direct + 4 synthetic)
 
 | Tool | Purpose |
 |------|---------|
-| `get_manifest` | START HERE for natural language questions — routing guide |
 | `resolve_topic` | Fast lookup for exact API terms (`ta.rsi`, `repainting`) |
 | `search_docs` | Grep for exact strings |
 | `list_docs` | List all available docs |
@@ -32,6 +33,26 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 | `get_functions` | List valid Pine v6 functions by namespace |
 | `validate_function` | Check if function name is valid |
 | `lint_script` | Lint Pine Script (17 rules, free, no API) |
+| `list_resources` | *Synthetic* — list available doc resources |
+| `read_resource` | *Synthetic* — read a doc resource by URI |
+| `list_prompts` | *Synthetic* — list prompt templates |
+| `get_prompt` | *Synthetic* — render a prompt with arguments |
+
+### Resources
+
+| URI | Content |
+|-----|---------|
+| `docs://manifest` | **START HERE** — LLM routing guide for Pine Script questions |
+| `docs://functions` | pine_v6_functions.json allowlist |
+| `docs://{path*}` | Any doc file (e.g. `concepts/timeframes.md`) |
+
+### Prompts
+
+| Prompt | Purpose |
+|--------|---------|
+| `debug_error` | Analyze Pine Script compilation errors |
+| `convert_v5_to_v6` | Guide v5 → v6 migration |
+| `explain_function` | Explain a Pine Script function in detail |
 
 ## Commands
 
@@ -52,9 +73,12 @@ uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 
 ## Design Decisions
 
-- `TOPIC_MAP` is intentionally narrow (exact API terms only) — natural language routing is the LLM's job via `get_manifest()`
+- `TOPIC_MAP` is intentionally narrow (exact API terms only) — natural language routing is the LLM's job via the `docs://manifest` resource
 - `DOC_COMPANIONS` kept to 2 entries (strategy→execution_model, request→timeframes) — more causes noise
 - `list_sections` filters to `##` headers only — `###` subsections are noise for navigation
 - Custom `CollectorRegistry` for Prometheus — avoids default Python GC/process metrics
+- No BM25SearchTransform — 14 tools is small enough for direct visibility; BM25 hid tools and broke client interop
+- `stateless_http=True` on both HTTP apps — Fly.io routes across instances, no session affinity needed
+- ResourcesAsTools + PromptsAsTools applied globally — STDIO clients lack resource/prompt UI too
 
 See @DEVELOPMENT.md for project structure and contributor workflows.

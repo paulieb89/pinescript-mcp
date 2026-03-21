@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## v0.6.15 → v0.6.16
+
+### Added: MCP Resources for documentation corpus
+
+Three resources expose the docs to resource-capable clients:
+
+- `docs://manifest` — LLM_MANIFEST.md routing index
+- `docs://functions` — pine_v6_functions.json (complete function allowlist)
+- `docs://{path*}` — any doc file by path (e.g. `concepts/timeframes.md`)
+
+Resources reuse existing `_validate_path()` and `_get_doc_content()` — no new loading logic.
+
+### Added: ResourcesAsTools + PromptsAsTools transforms
+
+Applied globally (module level, not HTTP-only) so both STDIO and HTTP clients get:
+
+- `list_resources` / `read_resource` — browse and read docs as MCP resources
+- `list_prompts` / `get_prompt` — access prompt templates as tools
+
+Total tool count: 9 direct + 4 synthetic = 13 tools visible to all clients.
+
+### Removed: `get_manifest` tool
+
+Replaced by the `docs://manifest` resource. The tool was 95% identical to the resource — both returned `LLM_MANIFEST.md`. The HTTP preamble (transport-aware quick reference) was its only unique feature, and is no longer needed with BM25 removed. The `docs://manifest` resource description now says "START HERE" to preserve discoverability. `resolve_topic()` suggestions updated to reference the resource.
+
+### Removed: BM25SearchTransform default
+
+BM25 hid all tools from `list_tools()`, replacing them with `search_tools` + `call_tool`. This broke broad client interop — most clients (Claude Code, Cursor, Cline) work better with direct tool visibility. With only 13 tools, catalog search adds friction without benefit.
+
+### Added: Stateless HTTP mode
+
+`stateless_http=True` on both `http_app()` calls (streamable-http and SSE). Each request gets a fresh transport context — no session affinity needed for Fly.io multi-instance routing.
+
 ## v0.6.14 → v0.6.15
 
 ### Added: SSE transport for backward compatibility
