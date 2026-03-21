@@ -8,6 +8,10 @@
     {
       "type": "streamable-http",
       "url": "https://pinescript-mcp.fly.dev/mcp"
+    },
+    {
+      "type": "sse",
+      "url": "https://pinescript-mcp.fly.dev/sse"
     }
   ],
   "packages": [

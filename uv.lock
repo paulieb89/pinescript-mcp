@@ -676,7 +676,7 @@ wheels = [
 
 [[package]]
 name = "pinescript-mcp"
-version = "0.6.11"
+version = "0.6.15"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
