@@ -5,6 +5,7 @@ Pine Script v6 Documentation MCP Server
 Provides tools to list, search, and read Pine Script v6 documentation.
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -61,6 +62,7 @@ try:
     )
     from pynescript.ast import Import as PineImport
     from pynescript.ast import Tuple as PineTuple
+    from pynescript.ast.grammar.antlr4.generated.PinescriptParser import PinescriptParser as _PineParser
     HAS_PYNESCRIPT = True
 except ImportError:
     HAS_PYNESCRIPT = False
@@ -84,6 +86,14 @@ class LintResult(BaseModel):
     status: Literal["ok", "issues_found"]
     count: int
     issues: list[LintIssue]
+    script_id: str | None = None  # content hash for edit_and_lint
+
+
+class ScriptEdit(BaseModel):
+    """A single line edit to apply to a cached script."""
+    line: int   # 1-based line number
+    old: str    # text to find on that line (for validation)
+    new: str    # replacement text
 
 
 class ValidationResult(BaseModel):
@@ -329,6 +339,45 @@ def _get_doc_lines(rel_path: str) -> list[str]:
 def _get_doc_content(rel_path: str) -> str:
     """Return doc file as a single string, cached after first read."""
     return "\n".join(_get_doc_lines(rel_path))
+
+
+# ---------------------------------------------------------------------------
+# Script Cache — content-addressed, TTL-evicted, per-instance
+# Enables edit_and_lint() to apply line edits without re-sending full script.
+# Cache key is sha256(script)[:12] so same content = same ID on any instance.
+# ---------------------------------------------------------------------------
+_SCRIPT_CACHE_MAX = 100
+_SCRIPT_CACHE_TTL = 1800  # 30 minutes
+_SCRIPT_CACHE: dict[str, tuple[str, float]] = {}  # id → (script_text, timestamp)
+
+
+def _cache_script(script: str) -> str:
+    """Cache script text, return content-addressed ID."""
+    script_id = hashlib.sha256(script.encode()).hexdigest()[:12]
+    _SCRIPT_CACHE[script_id] = (script, time.time())
+    # Evict expired + overflow
+    if len(_SCRIPT_CACHE) > _SCRIPT_CACHE_MAX:
+        cutoff = time.time() - _SCRIPT_CACHE_TTL
+        expired = [k for k, (_, ts) in _SCRIPT_CACHE.items() if ts < cutoff]
+        for k in expired:
+            del _SCRIPT_CACHE[k]
+        # If still over limit, evict oldest
+        if len(_SCRIPT_CACHE) > _SCRIPT_CACHE_MAX:
+            oldest = min(_SCRIPT_CACHE, key=lambda k: _SCRIPT_CACHE[k][1])
+            del _SCRIPT_CACHE[oldest]
+    return script_id
+
+
+def _get_cached_script(script_id: str) -> str | None:
+    """Retrieve cached script if exists and not expired."""
+    entry = _SCRIPT_CACHE.get(script_id)
+    if entry is None:
+        return None
+    text, ts = entry
+    if time.time() - ts > _SCRIPT_CACHE_TTL:
+        del _SCRIPT_CACHE[script_id]
+        return None
+    return text
 
 
 # Topic mapping for resolve_topic() — exact Pine Script API terms only.
@@ -1224,6 +1273,10 @@ def _lint_undeclared(code: str, pattern_issues: list[dict] | None = None) -> lis
         return issues
     finally:
         del tree, all_nodes, suppress_ids
+        # ANTLR4 PredictionContextCache grows unboundedly (~1k entries/parse).
+        # No LLM accesses this; cold-parse penalty is only 0.5ms.
+        if HAS_PYNESCRIPT:
+            _PineParser.sharedContextCache.cache.clear()
 
 
 @mcp.tool(
@@ -1240,7 +1293,7 @@ async def lint_script(script: str) -> LintResult:
         script: The Pine Script code to lint.
 
     Returns:
-        LintResult with status, count, and list of issues found.
+        LintResult with status, count, script_id (for edit_and_lint), and list of issues found.
     """
     MAX_SCRIPT_SIZE = 50_000  # 50KB — no real Pine Script is larger
     if len(script) > MAX_SCRIPT_SIZE:
@@ -1261,12 +1314,131 @@ async def lint_script(script: str) -> LintResult:
         undeclared_issues = _lint_undeclared(script, pattern_issues) if not syntax_issues else []
         raw_issues = syntax_issues + pattern_issues + undeclared_issues
         issues = [LintIssue(**issue) for issue in raw_issues]
+        script_id = _cache_script(script)
         log["issues_found"] = len(issues)
+        log["script_id"] = script_id
 
         return LintResult(
             status="ok" if not issues else "issues_found",
             count=len(issues),
-            issues=issues
+            issues=issues,
+            script_id=script_id,
+        )
+
+
+def _check_premium_auth() -> LintResult | None:
+    """Check auth for premium tools. Returns error LintResult if blocked, None if OK.
+
+    - STDIO (local): always allowed (no headers to check)
+    - HTTP without MCP_API_KEY configured: blocked (operator must configure)
+    - HTTP with valid Bearer token: allowed
+    """
+    from fastmcp.server.dependencies import get_http_headers
+
+    headers = get_http_headers(include=["authorization"])
+    if not headers:
+        return None  # STDIO transport — local use, always allowed
+
+    # HTTP transport — require auth
+    api_key = os.getenv("MCP_API_KEY", "")
+    if not api_key:
+        return LintResult(
+            status="issues_found", count=1, script_id=None,
+            issues=[LintIssue(line=0, rule="AUTH", message="Premium tool not configured on this server", severity="error")]
+        )
+    auth = headers.get("authorization", "")
+    if auth == f"Bearer {api_key}":
+        return None  # Valid key
+    return LintResult(
+        status="issues_found", count=1, script_id=None,
+        issues=[LintIssue(line=0, rule="AUTH", message="edit_and_lint requires valid Authorization header", severity="error")]
+    )
+
+
+@mcp.tool(
+    tags={"validation"},
+    annotations={"readOnlyHint": False, "idempotentHint": False, "openWorldHint": False},
+    timeout=30,
+)
+async def edit_and_lint(script_id: str, edits: list[ScriptEdit]) -> LintResult:
+    """Apply line edits to a previously linted script and re-lint.
+
+    Use after lint_script() returns issues. Send only the changed lines
+    instead of the full script — saves tokens on fix-and-re-lint cycles.
+
+    Args:
+        script_id: The script_id returned by a previous lint_script() call.
+        edits: List of line edits. Each specifies a 1-based line number,
+               the old text expected on that line, and the new replacement text.
+
+    Returns:
+        LintResult with new script_id and fresh lint issues.
+        If script_id not found (expired or different server instance),
+        re-send the full script via lint_script() instead.
+    """
+    # Per-tool auth — only this tool is gated
+    auth_err = _check_premium_auth()
+    if auth_err is not None:
+        return auth_err
+
+    with _timed_tool("edit_and_lint", script_id=script_id, edit_count=len(edits)) as log:
+        # Retrieve cached script
+        script = _get_cached_script(script_id)
+        if script is None:
+            log["cache_hit"] = False
+            return LintResult(
+                status="issues_found", count=1, script_id=None,
+                issues=[LintIssue(
+                    line=0, rule="CACHE_MISS",
+                    message=f"Script '{script_id}' not found (expired or different server instance). Re-send full script via lint_script().",
+                    severity="error",
+                )]
+            )
+        log["cache_hit"] = True
+
+        # Apply edits
+        lines = script.split("\n")
+        for edit in edits:
+            idx = edit.line - 1  # 0-based
+            if idx < 0 or idx >= len(lines):
+                return LintResult(
+                    status="issues_found", count=1, script_id=script_id,
+                    issues=[LintIssue(
+                        line=edit.line, rule="EDIT_ERROR",
+                        message=f"Line {edit.line} out of range (script has {len(lines)} lines).",
+                        severity="error",
+                    )]
+                )
+            if edit.old and edit.old not in lines[idx]:
+                return LintResult(
+                    status="issues_found", count=1, script_id=script_id,
+                    issues=[LintIssue(
+                        line=edit.line, rule="EDIT_MISMATCH",
+                        message=f"Expected '{edit.old}' on line {edit.line}, found '{lines[idx].strip()}'. Script may have changed.",
+                        severity="error",
+                    )]
+                )
+            if edit.old:
+                lines[idx] = lines[idx].replace(edit.old, edit.new, 1)
+            else:
+                lines[idx] = edit.new
+
+        # Re-lint the modified script
+        modified = "\n".join(lines)
+        syntax_issues = _lint_syntax(modified)
+        pattern_issues = _lint_pine(modified)
+        undeclared_issues = _lint_undeclared(modified, pattern_issues) if not syntax_issues else []
+        raw_issues = syntax_issues + pattern_issues + undeclared_issues
+        issues = [LintIssue(**issue) for issue in raw_issues]
+        new_script_id = _cache_script(modified)
+        log["issues_found"] = len(issues)
+        log["new_script_id"] = new_script_id
+
+        return LintResult(
+            status="ok" if not issues else "issues_found",
+            count=len(issues),
+            issues=issues,
+            script_id=new_script_id,
         )
 
 
