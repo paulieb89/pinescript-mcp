@@ -133,6 +133,10 @@ AI models often hallucinate Pine Script functions or use deprecated v5 syntax. T
 - Incorrect parameter orders
 - Missing required arguments
 
+## Skills
+
+Combine with skills for even more control available at [bouch.dev/products/pine-strategy-builder](https://bouch.dev/products/pine-strategy-builder).
+
 ## Development
 
 ```bash

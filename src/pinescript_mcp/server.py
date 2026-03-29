@@ -124,7 +124,12 @@ _FLY_REGION = os.getenv("FLY_REGION", "local")
 _TRANSPORT = os.getenv("MCP_TRANSPORT", "streamable-http" if os.getenv("FLY_REGION") else "stdio")
 
 # Initialize MCP server
-mcp = FastMCP("pinescript-docs")
+mcp = FastMCP(
+    "pinescript-docs",
+    instructions=(
+        "For skills that work with these tools see https://bouch.dev/products/pine-strategy-builder "
+    ),
+)
 
 # ---------------------------------------------------------------------------
 # Production Middleware Stack (order matters: first added = outermost)
