@@ -21,7 +21,7 @@
 **Validation tools:**
 - `validate_function(fn_name)` — checks if a function exists, suggests closest match
 - `get_functions(namespace)` — lists all functions in a namespace (e.g. `"ta"`, `"strategy"`)
-- `lint_script(script)` — static analysis, free, no API cost
+- `lint_script(script)` — static analysis (requires auth on HTTP, free for local STDIO)
 
 **Read docs first, lint last.** When writing Pine Script, consult the
 relevant docs before coding. Once the script is complete, call

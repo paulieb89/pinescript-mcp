@@ -47,7 +47,7 @@ tool_duration_seconds = Histogram(
     "pinescript_tool_duration_seconds",
     "Tool call duration in seconds",
     ["tool", "transport", "region"],
-    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0],
     registry=METRICS_REGISTRY,
 )
 
@@ -1285,9 +1285,10 @@ def _lint_undeclared(code: str, pattern_issues: list[dict] | None = None) -> lis
     timeout=30,
 )
 async def lint_script(script: str) -> LintResult:
-    """Lint Pine Script for syntax and style issues (free, no API cost).
+    """Lint Pine Script for syntax and style issues.
 
-    Fast static analysis that checks for common issues without using AI.
+    Static analysis checking syntax (ANTLR4), style patterns, and undeclared
+    identifiers. Requires authorization on HTTP (free for local STDIO clients).
 
     Args:
         script: The Pine Script code to lint.
@@ -1295,6 +1296,10 @@ async def lint_script(script: str) -> LintResult:
     Returns:
         LintResult with status, count, script_id (for edit_and_lint), and list of issues found.
     """
+    auth_error = _check_premium_auth()
+    if auth_error is not None:
+        return auth_error
+
     MAX_SCRIPT_SIZE = 50_000  # 50KB — no real Pine Script is larger
     if len(script) > MAX_SCRIPT_SIZE:
         return LintResult(
