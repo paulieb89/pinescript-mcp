@@ -1,27 +1,25 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.gitlab.articat1066/pinescript-v6-mcp",
+  "name": "io.github.paulieb89/pinescript-mcp",
   "title": "Pine Script v6 Documentation",
-  "description": "Look up Pine Script v6 functions, validate syntax, and search documentation for AI code generation",
+  "description": "Pine Script v6 documentation lookup, function validation, and linting for AI code generation",
   "version": "0.6.16",
+  "websiteUrl": "https://bouch.dev",
+  "repository": {
+    "url": "https://github.com/paulieb89/pinescript-mcp",
+    "source": "github"
+  },
   "remotes": [
-    {
-      "type": "streamable-http",
-      "url": "https://pinescript-mcp.fly.dev/mcp"
-    },
-    {
-      "type": "sse",
-      "url": "https://pinescript-mcp.fly.dev/sse"
-    }
+    { "type": "streamable-http", "url": "https://pinescript-mcp.fly.dev/mcp" },
+    { "type": "sse", "url": "https://pinescript-mcp.fly.dev/sse" }
   ],
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "pinescript-mcp",
       "version": "0.6.16",
-      "transport": {
-        "type": "stdio"
-      }
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" }
     }
   ]
 }
