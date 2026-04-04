@@ -1,6 +1,6 @@
 # pinescript-mcp
 
-<!-- mcp-name: io.gitlab.articat1066/pinescript-v6-mcp -->
+<!-- mcp-name: io.github.paulieb89/pinescript-mcp -->
 
 MCP server providing Pine Script v6 documentation for AI assistants (Claude, etc.).
 
