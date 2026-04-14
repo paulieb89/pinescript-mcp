@@ -22,10 +22,14 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "fastmcp>=3.1.0",
-    "uvicorn>=0.27.0",
-    "pynescript>=0.3.0",  # Pine Script AST parser for syntax validation
-    "prometheus_client>=0.21.0",  # Metrics for Fly.io Grafana
+    "fastmcp==3.2.3",
+    "mcp==1.26.0",
+    "pydantic==2.12.5",
+    "httpx==0.28.1",
+    "starlette==0.52.1",
+    "uvicorn==0.40.0",
+    "pynescript==0.3.0",  # Pine Script AST parser for syntax validation
+    "prometheus_client==0.24.1",  # Metrics for Fly.io Grafana
 ]
 
 [project.urls]
