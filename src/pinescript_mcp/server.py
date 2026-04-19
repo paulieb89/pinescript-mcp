@@ -15,7 +15,6 @@ from fastmcp import FastMCP, Context
 from fastmcp.server.context import _current_transport
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
-from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 from fastmcp.server.transforms import ResourcesAsTools, PromptsAsTools
 from fastmcp.utilities.logging import get_logger
 from pydantic import BaseModel
@@ -146,10 +145,9 @@ mcp.add_middleware(StructuredLoggingMiddleware(
     include_payloads=False,        # Don't log full payloads (keeps logs compact)
 ))
 
-# 3. Response limiting - prevent overwhelming client context
-mcp.add_middleware(ResponseLimitingMiddleware(
-    max_size=200_000,              # 200KB limit
-))
+# Response limiting removed — Lesson 33: server-side truncation drops
+# structured_content on oversized responses. Per-tool limit/offset in
+# get_doc / get_section / search_docs already handles large payloads.
 
 # ---------------------------------------------------------------------------
 # Transforms — expose resources and prompts as tools for clients that
