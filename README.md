@@ -73,7 +73,7 @@ Documentation is bundled in the package - each version contains a frozen snapsho
 
 Without pinning, `uvx pinescript-mcp` gets the latest version.
 
-## Available Tools (13)
+## Available Tools (12)
 
 | Tool | Description |
 |------|-------------|
@@ -85,7 +85,6 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 | `get_section(path, header)` | Read a specific section by header |
 | `get_functions(namespace)` | List valid functions (ta, strategy, etc.) |
 | `validate_function(name)` | Check if a function exists in Pine v6 |
-| `lint_script(script)` | Lint Pine Script (17 rules, free, no API cost) |
 | `list_resources()` | Browse available documentation resources |
 | `read_resource(uri)` | Read a doc resource by URI (e.g. `docs://manifest`) |
 | `list_prompts()` | List available prompt templates |

@@ -1,5 +1,48 @@
 # CHANGELOG
 
+## v0.6.17 → v0.7.0
+
+### Removed: `lint_script` and `edit_and_lint` — server is docs-only
+
+Breaking change. Both compute tools removed. Reasons:
+
+- **Zero real-world usage.** 7-day Grafana telemetry showed 0 calls to either
+  tool while docs tools served 800+ calls (validate_function 297, search_docs
+  240, get_section 67, resolve_topic 64, get_doc 57).
+- **Auth gate was effectively broken.** `lint_script` required `Authorization:
+  Bearer $MCP_API_KEY`, but the secret was never set on the hosted
+  (`pinescript-mcp.fly.dev`) instance, so every HTTP call returned a
+  "Premium tool not configured" error. ChatGPT's MCP wrapper treated that
+  state as an unconfigured connector and spun in an elicitation loop.
+- **The design is expensive and duplicative.** `lint_script` forced the LLM
+  to re-pass the full script (3-5k tokens), then ran an ANTLR4 grammar that
+  could drift from TradingView's actual compiler. TradingView surfaces the
+  same errors instantly when a user pastes — faster, free, authoritative.
+  `validate_function(fn_name)` still covers the cheap 80% for 10 tokens.
+
+### Also removed
+
+- `pynescript==0.3.0` dependency (and transitive `antlr4-python3-runtime`)
+- Internal helpers: `_lint_syntax`, `_lint_pine`, `_lint_undeclared`,
+  `_check_premium_auth`, `_cache_script`, `_get_cached_script`
+- Pydantic models: `LintIssue`, `LintResult`, `ScriptEdit`
+- Built-in identifier sets used only by undeclared-identifier detection
+- Script cache (`_SCRIPT_CACHE*`) and its eviction machinery
+
+Tool count 13 → 12 (8 direct + 4 synthetic). Image size down ~3MB from
+ANTLR4 runtime removal.
+
+### Migration
+
+If you were calling `lint_script` or `edit_and_lint` from a client or skill,
+replace with:
+1. `validate_function(fn_name)` for any non-obvious function names before
+   delivery.
+2. A delivered script comment instructing the user to paste into
+   TradingView's Pine Editor — "Add to Chart" surfaces any errors.
+
+Pine Strategy Builder skill (bouch.dev) updated in the same release.
+
 ## v0.6.15 → v0.6.16
 
 ### Added: MCP Resources for documentation corpus

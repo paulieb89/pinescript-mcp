@@ -21,13 +21,12 @@
 **Validation tools:**
 - `validate_function(fn_name)` — checks if a function exists, suggests closest match
 - `get_functions(namespace)` — lists all functions in a namespace (e.g. `"ta"`, `"strategy"`)
-- `lint_script(script)` — static analysis (requires auth on HTTP, free for local STDIO)
 
-**Read docs first, lint last.** When writing Pine Script, consult the
-relevant docs before coding. Once the script is complete, call
-`lint_script` once before presenting it to the user. Fix any errors
-and re-lint until clean. Don't skip the docs — the linter catches
-syntax issues, not logic errors or missed API features.
+**Read docs first.** When writing Pine Script, consult the relevant docs
+before coding. Use `validate_function` to sanity-check any non-obvious
+function names. Paste the finished script into TradingView's Pine Editor —
+the TradingView compiler will surface any syntax or type errors on "Add to
+Chart", which is faster and more authoritative than a server-side linter.
 
 ---
 

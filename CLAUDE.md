@@ -7,7 +7,7 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 
 ## Key Files
 
-- `src/pinescript_mcp/server.py` - All MCP tools, lint rules, middleware. **Tool docstrings = AI-visible descriptions**
+- `src/pinescript_mcp/server.py` - All MCP tools and middleware. **Tool docstrings = AI-visible descriptions**
 - `pyproject.toml` - Package metadata, dependencies
 - `.bumpversion.toml` - Version sync (pyproject.toml, __init__.py, server.json, mcp.json)
 - `fly.toml` - Fly.io deployment config + `[metrics]` for Prometheus scraping
@@ -18,9 +18,9 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 - reddit/
 - dist/
 
-## MCP Surface (13 tools, 3 resources, 3 prompts)
+## MCP Surface (12 tools, 3 resources, 3 prompts)
 
-### Tools (9 direct + 4 synthetic)
+### Tools (8 direct + 4 synthetic)
 
 | Tool | Purpose |
 |------|---------|
@@ -32,7 +32,6 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 | `get_section` | Get section by markdown header |
 | `get_functions` | List valid Pine v6 functions by namespace |
 | `validate_function` | Check if function name is valid |
-| `lint_script` | Lint Pine Script (17 rules, free, no API) |
 | `list_resources` | *Synthetic* — list available doc resources |
 | `read_resource` | *Synthetic* — read a doc resource by URI |
 | `list_prompts` | *Synthetic* — list prompt templates |
