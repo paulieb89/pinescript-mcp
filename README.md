@@ -30,7 +30,7 @@ Works with Claude Code, Claude Desktop, Gemini CLI, and any MCP client that supp
 
 No Python or uvx needed — connect directly to the hosted server.
 
-**Streamable-HTTP** (Claude.ai, modern clients):
+**Streamable HTTP** — Claude Code, Claude Desktop, Cursor, Cline (standard `mcpServers` with `type` field):
 
 ```json
 {
@@ -43,7 +43,23 @@ No Python or uvx needed — connect directly to the hosted server.
 }
 ```
 
-**SSE** (Cursor, Cline, Windsurf, ChatGPT):
+**Windsurf** — uses its own `serverUrl` shape (see [Windsurf docs](https://docs.windsurf.com/windsurf/cascade/mcp#remote-http-mcps)). Edit `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pinescript-docs": {
+      "serverUrl": "https://pinescript-mcp.fly.dev/mcp"
+    }
+  }
+}
+```
+
+**ChatGPT** — no config file. In ChatGPT, go to **Settings → Connectors → Create** and paste `https://pinescript-mcp.fly.dev/mcp` into the Server URL field. Developer Mode must be enabled (see [OpenAI Developer Mode guide](https://platform.openai.com/docs/mcp)).
+
+**Claude.ai** — add via the web UI's MCP connector settings, not a JSON file.
+
+**SSE** (legacy transport, kept for older clients):
 
 ```json
 {
@@ -56,22 +72,26 @@ No Python or uvx needed — connect directly to the hosted server.
 }
 ```
 
+Streamable HTTP is preferred — SSE is being phased out across the MCP ecosystem.
+
 ## Version Pinning
 
-Documentation is bundled in the package - each version contains a frozen snapshot. For reproducible agent behavior, pin to a specific version:
+Documentation is bundled in the package — each version contains a frozen snapshot. For reproducible agent behaviour, pin to a specific version:
 
 ```json
 {
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.6.16"]
+      "args": ["pinescript-mcp==0.7.0"]
     }
   }
 }
 ```
 
 Without pinning, `uvx pinescript-mcp` gets the latest version.
+
+> Note: versions before `0.7.0` included `lint_script` and `edit_and_lint` tools that were removed in 0.7.0 (docs-only server). Pinning to 0.6.x will give you those tools back, but the auth gate on `lint_script` was never completed on the hosted Fly instance, so they'll return auth errors on HTTP. Pin 0.7.0+ for the current, working tool surface.
 
 ## Available Tools (12)
 
