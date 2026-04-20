@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "fastmcp==3.2.3",
+    "fastmcp==3.2.4",
     "mcp==1.26.0",
     "pydantic==2.12.5",
     "httpx==0.28.1",
@@ -32,9 +32,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.com/articat1066/pinescript-v6-mcp"
-Documentation = "https://gitlab.com/articat1066/pinescript-v6-mcp#readme"
-Repository = "https://gitlab.com/articat1066/pinescript-v6-mcp"
+Homepage = "https://github.com/paulieb89/pinescript-mcp"
+Documentation = "https://github.com/paulieb89/pinescript-mcp#readme"
+Repository = "https://github.com/paulieb89/pinescript-mcp"
+"Live Endpoint" = "https://pinescript-mcp.fly.dev/mcp"
 
 [project.scripts]
 pinescript-mcp = "pinescript_mcp.server:main"
