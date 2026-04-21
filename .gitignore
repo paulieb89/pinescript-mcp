@@ -37,9 +37,19 @@ Thumbs.db
 
 # Local/ephemeral
 mcp.json
+.mcp.json
 SESSION.md
 .claude/
+.superpowers/
 PLAN-*.md
 ROADMAP.md
 .pypirc
 reddit/
+.mypy_cache/
+.pytest_cache/
+
+# Local screenshots, dashboards, demo assets
+*.png
+*.jpg
+*.jpeg
+grafana-dashboard.json
