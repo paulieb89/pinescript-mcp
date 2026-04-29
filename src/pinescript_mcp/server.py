@@ -908,6 +908,15 @@ async def health_check(request):
     return JSONResponse({"status": "healthy", "server": "pinescript-docs", "version": __version__})
 
 
+@mcp.custom_route("/.well-known/glama.json", methods=["GET"])
+async def glama_claim(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({
+        "$schema": "https://glama.ai/mcp/schemas/connector.json",
+        "maintainers": [{"email": "paul@bouch.dev"}],
+    })
+
+
 @mcp.custom_route("/metrics", methods=["GET"])
 async def metrics(request):
     """Prometheus metrics endpoint for Fly.io scraping."""
