@@ -3,7 +3,7 @@
   "name": "io.github.paulieb89/pinescript-mcp",
   "title": "Pine Script v6 Documentation",
   "description": "Pine Script v6 documentation lookup and function validation for AI code generation",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "websiteUrl": "https://bouch.dev",
   "repository": {
     "url": "https://github.com/paulieb89/pinescript-mcp",
@@ -17,7 +17,7 @@
     {
       "registryType": "pypi",
       "identifier": "pinescript-mcp",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "runtimeHint": "uvx",
       "transport": { "type": "stdio" }
     }

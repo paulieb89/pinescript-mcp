@@ -14,7 +14,7 @@ from fastmcp import FastMCP, Context
 from fastmcp.server.context import _current_transport
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
-from fastmcp.server.transforms import ResourcesAsTools, PromptsAsTools
+from fastmcp.server.transforms import PromptsAsTools
 from fastmcp.utilities.logging import get_logger
 from pydantic import BaseModel
 import time
@@ -111,7 +111,6 @@ mcp.add_middleware(StructuredLoggingMiddleware(
 # Transforms — expose resources and prompts as tools for clients that
 # don't natively support MCP resources/prompts (most current LLM clients)
 # ---------------------------------------------------------------------------
-mcp.add_transform(ResourcesAsTools(mcp))
 mcp.add_transform(PromptsAsTools(mcp))
 
 _logger = get_logger("pinescript_mcp.tools")

@@ -2,6 +2,8 @@
 
 <!-- mcp-name: io.github.paulieb89/pinescript-mcp -->
 
+[![pinescript-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp)
+
 MCP server providing Pine Script v6 documentation for AI assistants (Claude, etc.).
 
 Enables AI to:
@@ -93,7 +95,7 @@ Without pinning, `uvx pinescript-mcp` gets the latest version.
 
 > Note: versions before `0.7.0` included `lint_script` and `edit_and_lint` tools that were removed in 0.7.0 (docs-only server). Pinning to 0.6.x will give you those tools back, but the auth gate on `lint_script` was never completed on the hosted Fly instance, so they'll return auth errors on HTTP. Pin 0.7.0+ for the current, working tool surface.
 
-## Available Tools (12)
+## Available Tools
 
 | Tool | Description |
 |------|-------------|
