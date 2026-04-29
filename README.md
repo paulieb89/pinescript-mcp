@@ -3,6 +3,7 @@
 <!-- mcp-name: io.github.paulieb89/pinescript-mcp -->
 
 [![pinescript-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp)
+[![smithery badge](https://smithery.ai/badge/bouch/pinescript)](https://smithery.ai/servers/bouch/pinescript)
 
 MCP server providing Pine Script v6 documentation for AI assistants (Claude, etc.).
 
