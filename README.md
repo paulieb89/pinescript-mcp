@@ -164,7 +164,7 @@ Combine with skills for even more control available at [bouch.dev/products/pine-
 
 ```bash
 # Clone and install locally
-git clone https://gitlab.com/articat1066/pinescript-v6-mcp
+git clone https://github.com/paulieb89/pinescript-mcp
 cd pinescript-mcp
 pip install -e .
 
