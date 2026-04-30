@@ -908,6 +908,12 @@ async def health_check(request):
     return JSONResponse({"status": "healthy", "server": "pinescript-docs", "version": __version__})
 
 
+@mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
+async def smithery_server_card(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"serverInfo": {"name": "pinescript-mcp", "version": __version__}})
+
+
 @mcp.custom_route("/.well-known/glama.json", methods=["GET"])
 async def glama_claim(request):
     from starlette.responses import JSONResponse

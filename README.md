@@ -2,6 +2,7 @@
 
 <!-- mcp-name: io.github.paulieb89/pinescript-mcp -->
 
+[![PyPI](https://img.shields.io/pypi/v/pinescript-mcp)](https://pypi.org/project/pinescript-mcp/)
 [![pinescript-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp)
 [![smithery badge](https://smithery.ai/badge/bouch/pinescript)](https://smithery.ai/servers/bouch/pinescript)
 
