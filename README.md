@@ -6,6 +6,8 @@
 [![pinescript-mcp MCP server](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp/badges/card.svg)](https://glama.ai/mcp/servers/paulieb89/pinescript-mcp)
 [![smithery badge](https://smithery.ai/badge/bouch/pinescript)](https://smithery.ai/servers/bouch/pinescript)
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=pinescript-docs&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fpinescript-mcp.fly.dev%2Fmcp%22%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=pinescript-docs&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fpinescript-mcp.fly.dev%2Fmcp%22%7D&quality=insiders)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=pinescript-docs&config=eyJ0eXBlIjoiaHR0cCIsInVybCI6Imh0dHBzOi8vcGluZXNjcmlwdC1tY3AuZmx5LmRldi9tY3AifQ==)
 [![Install in VS Code (local)](https://img.shields.io/badge/VS_Code-Install_Local-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=pinescript-docs&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22pinescript-mcp%22%5D%7D)
 
 MCP server providing Pine Script v6 documentation for AI assistants (Claude, etc.).
