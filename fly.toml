@@ -19,19 +19,17 @@ primary_region = 'sjc'
     soft_limit = 25
     hard_limit = 50
 
-[checks]
-  [checks.health]
-    port = 8080
-    type = 'http'
-    interval = '30s'
-    timeout = '5s'
-    path = '/health'
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
 
 [[vm]]
   memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
 
 [metrics]
   port = 8080
