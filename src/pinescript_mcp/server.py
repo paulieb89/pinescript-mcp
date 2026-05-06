@@ -930,6 +930,29 @@ async def metrics(request):
     return Response(generate_latest(METRICS_REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
+class _AcceptNormalizer:
+    """Stamp Accept to the MCP-spec value on /mcp only, so json_response=True never 406s.
+
+    Anthropic sends mixed Accept headers per request type (application/json for
+    initialize, text/event-stream for tools/list). Only stamp the MCP endpoint —
+    SSE paths (/sse, /messages) and other routes pass through untouched.
+    """
+    def __init__(self, app, mcp_path: bytes = b"/mcp"):
+        self.app = app
+        self._mcp_path = mcp_path.rstrip(b"/")
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("path", "").rstrip("/").encode() == self._mcp_path:
+            headers = [
+                (b"accept", b"application/json, text/event-stream")
+                if name.lower() == b"accept"
+                else (name, value)
+                for name, value in scope.get("headers", [])
+            ]
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 def main():
     """Entry point for the CLI."""
     import argparse
@@ -965,7 +988,14 @@ def main():
             else:
                 await streamable_app(scope, receive, send)
 
-        config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+        config = uvicorn.Config(
+            _AcceptNormalizer(app),
+            host=args.host,
+            port=args.port,
+            log_level="info",
+            forwarded_allow_ips="*",
+            proxy_headers=True,
+        )
         server = uvicorn.Server(config)
         asyncio.run(server.serve())
     else:
