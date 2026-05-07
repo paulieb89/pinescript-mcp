@@ -91,7 +91,7 @@ Documentation is bundled in the package — each version contains a frozen snaps
   "mcpServers": {
     "pinescript-docs": {
       "command": "uvx",
-      "args": ["pinescript-mcp==0.7.3"]
+      "args": ["pinescript-mcp==0.7.4"]
     }
   }
 }
