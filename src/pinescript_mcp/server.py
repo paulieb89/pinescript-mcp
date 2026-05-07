@@ -931,18 +931,20 @@ async def metrics(request):
 
 
 class _AcceptNormalizer:
-    """Stamp Accept to the MCP-spec value on /mcp only, so json_response=True never 406s.
+    """Normalize Accept header on /mcp to prevent 406 Not Acceptable.
 
-    Anthropic sends mixed Accept headers per request type (application/json for
-    initialize, text/event-stream for tools/list). Only stamp the MCP endpoint —
-    SSE paths (/sse, /messages) and other routes pass through untouched.
+    Workaround for modelcontextprotocol/python-sdk#2349 — the MCP SDK
+    requires both application/json AND text/event-stream in the Accept
+    header (even in SSE mode), but Anthropic's MCP proxy and other
+    clients send them separately per request type. Stamp the combined
+    value on /mcp only; SSE paths (/sse, /messages) pass through.
     """
-    def __init__(self, app, mcp_path: bytes = b"/mcp"):
+    def __init__(self, app, mcp_path: str = "/mcp"):
         self.app = app
-        self._mcp_path = mcp_path.rstrip(b"/")
+        self._mcp_path = mcp_path.rstrip("/")
 
     async def __call__(self, scope, receive, send):
-        if scope.get("type") == "http" and scope.get("path", "").rstrip("/").encode() == self._mcp_path:
+        if scope.get("type") == "http" and scope.get("path", "").rstrip("/") == self._mcp_path:
             headers = [
                 (b"accept", b"application/json, text/event-stream")
                 if name.lower() == b"accept"
