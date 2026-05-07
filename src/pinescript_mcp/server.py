@@ -930,6 +930,31 @@ async def metrics(request):
     return Response(generate_latest(METRICS_REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
+class _AcceptNormalizer:
+    """Normalize Accept header on /mcp to prevent 406 Not Acceptable.
+
+    Workaround for modelcontextprotocol/python-sdk#2349 — the MCP SDK
+    requires both application/json AND text/event-stream in the Accept
+    header (even in SSE mode), but Anthropic's MCP proxy and other
+    clients send them separately per request type. Stamp the combined
+    value on /mcp only; SSE paths (/sse, /messages) pass through.
+    """
+    def __init__(self, app, mcp_path: str = "/mcp"):
+        self.app = app
+        self._mcp_path = mcp_path.rstrip("/")
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("path", "").rstrip("/") == self._mcp_path:
+            headers = [
+                (b"accept", b"application/json, text/event-stream")
+                if name.lower() == b"accept"
+                else (name, value)
+                for name, value in scope.get("headers", [])
+            ]
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 def main():
     """Entry point for the CLI."""
     import argparse
@@ -965,7 +990,14 @@ def main():
             else:
                 await streamable_app(scope, receive, send)
 
-        config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+        config = uvicorn.Config(
+            _AcceptNormalizer(app),
+            host=args.host,
+            port=args.port,
+            log_level="info",
+            forwarded_allow_ips="*",
+            proxy_headers=True,
+        )
         server = uvicorn.Server(config)
         asyncio.run(server.serve())
     else:

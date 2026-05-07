@@ -18,9 +18,9 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 - reddit/
 - dist/
 
-## MCP Surface (12 tools, 3 resources, 3 prompts)
+## MCP Surface (10 tools, 3 resources, 3 prompts)
 
-### Tools (8 direct + 4 synthetic)
+### Tools (8 direct + 2 synthetic)
 
 | Tool | Purpose |
 |------|---------|
@@ -32,8 +32,6 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 | `get_section` | Get section by markdown header |
 | `get_functions` | List valid Pine v6 functions by namespace |
 | `validate_function` | Check if function name is valid |
-| `list_resources` | *Synthetic* — list available doc resources |
-| `read_resource` | *Synthetic* — read a doc resource by URI |
 | `list_prompts` | *Synthetic* — list prompt templates |
 | `get_prompt` | *Synthetic* — render a prompt with arguments |
 
@@ -78,6 +76,6 @@ uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 - Custom `CollectorRegistry` for Prometheus — avoids default Python GC/process metrics
 - No BM25SearchTransform — 14 tools is small enough for direct visibility; BM25 hid tools and broke client interop
 - `stateless_http=True` on both HTTP apps — Fly.io routes across instances, no session affinity needed
-- ResourcesAsTools + PromptsAsTools applied globally — STDIO clients lack resource/prompt UI too
+- PromptsAsTools applied globally — ResourcesAsTools intentionally omitted (companion tools already cover all 3 resources with pagination/filtering)
 
 See @DEVELOPMENT.md for project structure and contributor workflows.
