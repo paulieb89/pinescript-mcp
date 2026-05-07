@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastmcp import FastMCP, Context
+from fastmcp.exceptions import ToolError
 from fastmcp.server.context import _current_transport
 from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
@@ -325,6 +326,15 @@ TOPIC_MAP = {
     "migration": "reference/migration_v5_to_v6.md",
 }
 
+# Known invalid/renamed functions → specific replacement hints for validate_function()
+KNOWN_REPLACEMENTS: dict[str, str] = {
+    "ta.adx": "ta.adx() does NOT exist. Use ta.dmi(diLen, adxSmoothing) → returns [diPlus, diMinus, adx] as a tuple.",
+    "ta.sum": "ta.sum() does NOT exist. Use math.sum(source, length) instead.",
+    "security": "security() was renamed in v5. Use request.security() instead.",
+    "study": "study() was renamed in v5. Use indicator() instead.",
+    "input": "input() works but prefer typed variants: input.int(), input.float(), input.string(), input.bool(), etc.",
+}
+
 
 def _find_section(content: str, header: str, include_children: bool = True) -> tuple[str, int, int]:
     """Find a section in markdown content by header text.
@@ -470,7 +480,7 @@ async def list_sections(path: str):
             return "\n".join(headers)
         except ValueError as e:
             log["error"] = str(e)
-            return f"Error: {e}"
+            raise ToolError(str(e))
 
 
 @mcp.tool(
@@ -503,7 +513,7 @@ async def get_doc(path: str, limit: int = 0, offset: int = 0):
 
             if limit > 0:
                 if offset >= total:
-                    return f"Error: offset {offset} exceeds file size ({total} chars). Use offset < {total}."
+                    raise ToolError(f"offset {offset} exceeds file size ({total} chars). Use offset < {total}.")
                 end = min(offset + limit, total)
                 content = content[offset:end]
                 has_more = end < total
@@ -515,7 +525,7 @@ async def get_doc(path: str, limit: int = 0, offset: int = 0):
                 return content
         except ValueError as e:
             log["error"] = str(e)
-            return f"Error: {e}"
+            raise ToolError(str(e))
 
 
 @mcp.tool(
@@ -543,7 +553,7 @@ async def get_section(path: str, header: str, include_children: bool = True):
             return f"# {path} (lines {start_line}-{end_line})\n\n{section}"
         except ValueError as e:
             log["error"] = str(e)
-            return f"Error: {e}"
+            raise ToolError(str(e))
 
 
 @mcp.tool(
@@ -556,14 +566,19 @@ async def search_docs(query: str, max_results: int = 5):
     Finds sections containing the query and returns previews with
     get_section() call hints so you can read the full content.
 
+    Multi-word queries use AND logic: all terms must appear in the
+    section (not necessarily on the same line).
+
     Args:
-        query: Exact string to search for (case-insensitive).
+        query: Search terms (case-insensitive). Multi-word queries
+               match sections containing ALL terms.
         max_results: Maximum sections to return (default: 5)
 
     Returns matching sections ranked by relevance with get_section() hints.
     """
     with _timed_tool("search_docs", query=query, max_results=max_results) as log:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        tokens = query.strip().split()
+        patterns = [re.compile(re.escape(t), re.IGNORECASE) for t in tokens]
         section_hits = []
 
         for rel_path in DOCS.keys():
@@ -580,8 +595,9 @@ async def search_docs(query: str, max_results: int = 5):
                 if header_match:
                     # Close previous section — check for hits
                     section_lines = lines[current_start:i]
-                    match_count = sum(1 for l in section_lines if pattern.search(l))
-                    if match_count and current_header != "(preamble)":
+                    section_text = "\n".join(section_lines)
+                    if all(p.search(section_text) for p in patterns) and current_header != "(preamble)":
+                        match_count = sum(sum(1 for p in patterns if p.search(l)) for l in section_lines)
                         section_hits.append({
                             "file": rel_path,
                             "header": current_header,
@@ -596,8 +612,9 @@ async def search_docs(query: str, max_results: int = 5):
 
             # Final section
             section_lines = lines[current_start:]
-            match_count = sum(1 for l in section_lines if pattern.search(l))
-            if match_count and current_header != "(preamble)":
+            section_text = "\n".join(section_lines)
+            if all(p.search(section_text) for p in patterns) and current_header != "(preamble)":
+                match_count = sum(sum(1 for p in patterns if p.search(l)) for l in section_lines)
                 section_hits.append({
                     "file": rel_path,
                     "header": current_header,
@@ -687,6 +704,10 @@ async def validate_function(fn_name: str) -> ValidationResult:
         if fn_name in PINE_V6_TOPLEVEL:
             return ValidationResult(valid=True, type="toplevel", function=fn_name)
 
+        # Check known invalid/renamed functions before generic fallback
+        if fn_name in KNOWN_REPLACEMENTS:
+            return ValidationResult(valid=False, type=None, function=fn_name, suggestion=KNOWN_REPLACEMENTS[fn_name])
+
         if "." in fn_name:
             ns = fn_name.rpartition(".")[0]
             if ns in PINE_V6_NAMESPACES:
@@ -737,6 +758,16 @@ async def resolve_topic(query: str) -> ResolveResult:
                 path_scores[path].append(keyword)
 
         log["matches_found"] = len(path_scores)
+
+        if not path_scores:
+            # Fallback: scan docs for an exact substring match before returning empty
+            fallback_pattern = re.compile(re.escape(query), re.IGNORECASE)
+            for rel_path in DOCS:
+                doc_lines = _get_doc_lines(rel_path)
+                if doc_lines and any(fallback_pattern.search(l) for l in doc_lines):
+                    path_scores[rel_path] = [query]
+                    break
+            log["fallback_used"] = bool(path_scores)
 
         if not path_scores:
             return ResolveResult(

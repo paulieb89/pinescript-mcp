@@ -25,13 +25,13 @@ MCP server providing Pine Script v6 documentation to AI assistants.
 | Tool | Purpose |
 |------|---------|
 | `resolve_topic` | Fast lookup for exact API terms (`ta.rsi`, `repainting`) |
-| `search_docs` | Grep for exact strings |
+| `search_docs` | Search docs — multi-word queries use AND logic |
 | `list_docs` | List all available docs |
 | `list_sections` | List `##` headers in a doc (navigate large files) |
 | `get_doc` | Read a specific doc file (limit/offset) |
 | `get_section` | Get section by markdown header |
 | `get_functions` | List valid Pine v6 functions by namespace |
-| `validate_function` | Check if function name is valid |
+| `validate_function` | Check if function name is valid (known replacements for common mistakes) |
 | `list_prompts` | *Synthetic* — list prompt templates |
 | `get_prompt` | *Synthetic* — render a prompt with arguments |
 
@@ -62,6 +62,11 @@ fly deploy                                   # Deploy Fly.io
 uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 ```
 
+## Known Issues / Pending Fixes (before June 2, 2026)
+
+- `.github/workflows/release.yml`: rename `skip_existing` → `skip-existing` in `pypa/gh-action-pypi-publish` (deprecated input)
+- `.github/workflows/release.yml`: update `actions/checkout@v4` and `astral-sh/setup-uv@v5` to Node.js 24-compatible versions (Node.js 20 runners removed September 16, 2026)
+
 ## Observability
 
 - Tool calls log JSON to stderr via `_timed_tool` context manager
@@ -70,7 +75,9 @@ uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 
 ## Design Decisions
 
-- `TOPIC_MAP` is intentionally narrow (exact API terms only) — natural language routing is the LLM's job via the `docs://manifest` resource
+- `TOPIC_MAP` is intentionally narrow (exact API terms only) — `resolve_topic()` falls back to a doc scan when TOPIC_MAP misses, so unknown terms still get a best-effort match
+- `KNOWN_REPLACEMENTS` maps common invalid/renamed functions (e.g. `ta.adx` → `ta.dmi`, `security` → `request.security`) to specific suggestions in `validate_function()`
+- Error handling uses `ToolError` (sets MCP `isError: true`) instead of returning error strings as normal content
 - `DOC_COMPANIONS` kept to 2 entries (strategy→execution_model, request→timeframes) — more causes noise
 - `list_sections` filters to `##` headers only — `###` subsections are noise for navigation
 - Custom `CollectorRegistry` for Prometheus — avoids default Python GC/process metrics
