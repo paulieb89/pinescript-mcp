@@ -1,0 +1,119 @@
+//@version=6
+// RSI Divergence Indicator — quality-anchor example for the `pine` skill.
+// Detects regular bullish and bearish divergences between price and RSI by
+// comparing successive pivot lows / highs within a configurable lookback range.
+indicator(
+     title="RSI Divergence (v6 reference)",
+     shorttitle="RSI Div",
+     overlay=false,
+     format=format.price,
+     precision=2,
+     max_labels_count=500,
+     max_lines_count=500)
+
+// ─── Inputs ──────────────────────────────────────────────────────────────────
+rsi_length    = input.int(14,  title="RSI length",          minval=2,  maxval=200)
+rsi_src       = input.source(close, title="RSI source")
+pivot_left    = input.int(5,   title="Pivot lookback left",  minval=1,  maxval=50)
+pivot_right   = input.int(5,   title="Pivot lookback right", minval=1,  maxval=50)
+range_min     = input.int(5,   title="Min bars between pivots", minval=1,  maxval=100)
+range_max     = input.int(60,  title="Max bars between pivots", minval=5,  maxval=500)
+rsi_overbought = input.int(70, title="RSI overbought",       minval=50, maxval=100)
+rsi_oversold   = input.int(30, title="RSI oversold",         minval=0,  maxval=50)
+show_labels   = input.bool(true, title="Show divergence labels")
+
+// ─── Core calculation ────────────────────────────────────────────────────────
+rsi = ta.rsi(rsi_src, rsi_length)
+
+// Confirmed pivot levels for both RSI and price.
+// A confirmed pivot exists `pivot_right` bars back when it is found.
+rsi_pl   = ta.pivotlow(rsi,   pivot_left, pivot_right)
+rsi_ph   = ta.pivothigh(rsi,  pivot_left, pivot_right)
+price_pl = ta.pivotlow(low,   pivot_left, pivot_right)
+price_ph = ta.pivothigh(high, pivot_left, pivot_right)
+
+// Track the most recent confirmed pivots and their bar indices.
+var float last_rsi_pl_val      = na
+var int   last_rsi_pl_bar      = na
+var float last_rsi_ph_val      = na
+var int   last_rsi_ph_bar      = na
+var float last_price_pl_val    = na
+var float last_price_ph_val    = na
+
+bull_div = false
+bear_div = false
+
+// ─── Bullish divergence: price lower-low, RSI higher-low ─────────────────────
+if not na(rsi_pl) and not na(price_pl)
+    bars_since_prev = na(last_rsi_pl_bar) ? na : (bar_index - pivot_right) - last_rsi_pl_bar
+    in_range = not na(bars_since_prev) and bars_since_prev >= range_min and bars_since_prev <= range_max
+    if in_range
+        price_lower_low = price_pl < last_price_pl_val
+        rsi_higher_low  = rsi_pl   > last_rsi_pl_val
+        oversold_zone   = last_rsi_pl_val < rsi_oversold or rsi_pl < rsi_oversold
+        bull_div := price_lower_low and rsi_higher_low and oversold_zone
+    // Update trackers regardless of divergence outcome.
+    last_rsi_pl_val   := rsi_pl
+    last_rsi_pl_bar   := bar_index - pivot_right
+    last_price_pl_val := price_pl
+
+// ─── Bearish divergence: price higher-high, RSI lower-high ───────────────────
+if not na(rsi_ph) and not na(price_ph)
+    bars_since_prev = na(last_rsi_ph_bar) ? na : (bar_index - pivot_right) - last_rsi_ph_bar
+    in_range = not na(bars_since_prev) and bars_since_prev >= range_min and bars_since_prev <= range_max
+    if in_range
+        price_higher_high = price_ph > last_price_ph_val
+        rsi_lower_high    = rsi_ph   < last_rsi_ph_val
+        overbought_zone   = last_rsi_ph_val > rsi_overbought or rsi_ph > rsi_overbought
+        bear_div := price_higher_high and rsi_lower_high and overbought_zone
+    last_rsi_ph_val   := rsi_ph
+    last_rsi_ph_bar   := bar_index - pivot_right
+    last_price_ph_val := price_ph
+
+// ─── Plots ───────────────────────────────────────────────────────────────────
+plot(rsi, title="RSI", color=color.new(color.purple, 0), linewidth=2)
+hline(rsi_overbought, title="Overbought", color=color.new(color.red,   60), linestyle=hline.style_dashed)
+hline(50,             title="Midline",    color=color.new(color.gray,  70), linestyle=hline.style_dotted)
+hline(rsi_oversold,   title="Oversold",   color=color.new(color.green, 60), linestyle=hline.style_dashed)
+
+// Divergence markers on the RSI pane, offset back to the pivot bar.
+plotshape(bull_div, title="Bullish divergence",
+     style=shape.triangleup,
+     location=location.bottom,
+     color=color.new(color.green, 0),
+     size=size.small,
+     offset=-pivot_right)
+plotshape(bear_div, title="Bearish divergence",
+     style=shape.triangledown,
+     location=location.top,
+     color=color.new(color.red, 0),
+     size=size.small,
+     offset=-pivot_right)
+
+if show_labels and bull_div
+    label.new(
+         x=bar_index - pivot_right,
+         y=rsi_pl,
+         text="Bull",
+         style=label.style_label_up,
+         color=color.new(color.green, 20),
+         textcolor=color.white,
+         size=size.small)
+
+if show_labels and bear_div
+    label.new(
+         x=bar_index - pivot_right,
+         y=rsi_ph,
+         text="Bear",
+         style=label.style_label_down,
+         color=color.new(color.red, 20),
+         textcolor=color.white,
+         size=size.small)
+
+// ─── Alerts ──────────────────────────────────────────────────────────────────
+alertcondition(bull_div and barstate.isconfirmed,
+     title="RSI Bullish Divergence",
+     message="Bullish RSI divergence confirmed on {{ticker}} ({{interval}})")
+alertcondition(bear_div and barstate.isconfirmed,
+     title="RSI Bearish Divergence",
+     message="Bearish RSI divergence confirmed on {{ticker}} ({{interval}})")
