@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pinescript": {
+      "type": "http",
+      "url": "https://pinescript-mcp.fly.dev/mcp"
+    }
+  }
+}

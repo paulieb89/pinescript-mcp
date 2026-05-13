@@ -1,0 +1,10 @@
+{
+  "name": "pinescript",
+  "version": "0.1.0",
+  "description": "Pine Script v6 authoring assistant — writes validated TradingView indicators and strategies.",
+  "author": { "name": "bch" },
+  "homepage": "https://github.com/paulieb89/pinescript-mcp",
+  "repository": "https://github.com/paulieb89/pinescript-mcp",
+  "license": "MIT",
+  "keywords": ["pine-script", "tradingview", "indicators", "trading"]
+}

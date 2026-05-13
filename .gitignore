@@ -38,6 +38,7 @@ Thumbs.db
 # Local/ephemeral
 mcp.json
 .mcp.json
+!plugin/.mcp.json
 SESSION.md
 .claude/
 .superpowers/
