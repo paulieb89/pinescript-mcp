@@ -70,6 +70,15 @@ plugin/
 
 Both skills conform strictly to the [agentskills.io specification](https://agentskills.io/specification.md) — only the spec-defined frontmatter fields are used (`name`, `description`, `license`, `compatibility`, `metadata`), so the skills are portable to any agentskills.io-compliant client.
 
+Validate locally:
+
+```bash
+uvx --from skills-ref agentskills validate plugin/skills/pine
+uvx --from skills-ref agentskills validate plugin/skills/pine-validate
+```
+
+Verified working — `skills-ref` resolves on PyPI and exposes the `agentskills` CLI per the [reference library](https://github.com/agentskills/agentskills/tree/main/skills-ref).
+
 ## License
 
 MIT. See repository root `LICENSE`.
