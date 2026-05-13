@@ -67,21 +67,6 @@ No Python or uvx needed — connect directly to the hosted server.
 
 **Claude.ai** — add via the web UI's MCP connector settings, not a JSON file.
 
-**SSE** (legacy transport, kept for older clients):
-
-```json
-{
-  "mcpServers": {
-    "pinescript-docs": {
-      "type": "sse",
-      "url": "https://pinescript-mcp.fly.dev/sse"
-    }
-  }
-}
-```
-
-Streamable HTTP is preferred — SSE is being phased out across the MCP ecosystem.
-
 ## Version Pinning
 
 Documentation is bundled in the package — each version contains a frozen snapshot. For reproducible agent behaviour, pin to a specific version:
@@ -98,8 +83,6 @@ Documentation is bundled in the package — each version contains a frozen snaps
 ```
 
 Without pinning, `uvx pinescript-mcp` gets the latest version.
-
-> Note: versions before `0.7.0` included `lint_script` and `edit_and_lint` tools that were removed in 0.7.0 (docs-only server). Pinning to 0.6.x will give you those tools back, but the auth gate on `lint_script` was never completed on the hosted Fly instance, so they'll return auth errors on HTTP. Pin 0.7.0+ for the current, working tool surface.
 
 ## Available Tools
 

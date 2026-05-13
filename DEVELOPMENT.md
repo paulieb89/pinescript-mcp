@@ -52,7 +52,7 @@ See [README.md](README.md) for the full tools list and user-facing documentation
 ## Architecture
 
 - **Framework:** `fastmcp.FastMCP` ([gofastmcp.com](https://gofastmcp.com)) — not the official `mcp` SDK
-- **Transport:** Dual — streamable-http at `/mcp` + SSE at `/sse` on same port, `stateless_http=True` for Fly.io multi-instance routing
+- **Transport:** Streamable HTTP at `/mcp` (the current MCP transport per [spec 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports.md)). The legacy HTTP+SSE endpoints at `/sse` and `/messages/` are also served on the same port for clients that haven't migrated to Streamable HTTP (introduced in [spec 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports.md)), as the spec recommends. Protocol version (`2024-11-05` … `2025-11-25`) is negotiated per session and is independent of which transport the client uses. `stateless_http=True` on both apps for Fly.io multi-instance routing.
 - **Middleware:** Rate limiting → structured logging → response limiting (order matters)
 - **Transforms:** `ResourcesAsTools` + `PromptsAsTools` (applied globally, module level) — 4 synthetic tools for clients without native resource/prompt support
 - **Resources:** 3 MCP resources (`docs://manifest`, `docs://functions`, `docs://{path*}`) expose docs corpus directly
