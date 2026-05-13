@@ -1,6 +1,6 @@
 ---
 name: pine
-description: Writes Pine Script v6 indicators and strategies for TradingView from natural-language descriptions. Use when the user invokes /pine, asks Claude to write or build a Pine Script indicator, strategy, oscillator, or TradingView script, asks for a Pine v6 script, asks to convert v4/v5 Pine code to v6, or describes a trading indicator/strategy to implement (e.g. "RSI divergence", "EMA crossover strategy", "supertrend", "VWAP bands"). Routes through the pinescript MCP server (docs://manifest, get_section, validate_function) to fetch authoritative Pine v6 docs and validate every function call against the v6 allowlist before emitting code. Always produces scripts with //@version=6, the correct script-type declaration (indicator vs strategy), and named-argument calling convention. Does not invent function names. Does not emit v3/v4/v5 syntax. Keywords - Pine Script, Pine v6, TradingView, indicator, strategy, oscillator, screener, ta.rsi, ta.sma, request.security, plot, alertcondition.
+description: Writes Pine Script v6 indicators and strategies for TradingView from natural-language descriptions. Use when the user asks Claude to write or build a Pine Script indicator, strategy, oscillator, or TradingView script, asks for a Pine v6 script, asks to convert v4/v5 Pine code to v6, or describes a trading indicator/strategy to implement (e.g. "RSI divergence", "EMA crossover strategy", "supertrend", "VWAP bands"). Routes through the pinescript MCP server (docs://manifest, get_section, validate_function) to fetch authoritative Pine v6 docs and validate every function call against the v6 allowlist before emitting code. Always produces scripts with //@version=6, the correct script-type declaration (indicator vs strategy), and named-argument calling convention. Does not invent function names. Does not emit v3/v4/v5 syntax. Keywords - Pine Script, Pine v6, TradingView, indicator, strategy, oscillator, screener, ta.rsi, ta.sma, request.security, plot, alertcondition.
 license: MIT
 compatibility: Designed for Claude Code and other agentskills.io-compliant hosts. Requires the pinescript MCP server, hosted at https://pinescript-mcp.fly.dev/mcp or local via `uvx pinescript-mcp` (stdio). Without the MCP server the validation step cannot run and the skill must not emit code.
 metadata:
@@ -101,7 +101,6 @@ The pinescript MCP server exposes these tools and resources. Use the names verba
 - `get_section(path, header)` — read one section by header.
 - `get_functions(namespace?)` — list valid Pine v6 functions, optionally scoped to a namespace.
 - `validate_function(fn_name)` — **the mandatory pre-emit check.** Returns `ValidationResult` with `valid`, `type`, `function`, `suggestion`.
-- `list_prompts()` / `get_prompt(name, args)` — synthetic prompt-template access.
 
 **Resources:**
 

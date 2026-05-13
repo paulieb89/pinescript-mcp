@@ -4,10 +4,12 @@ Pine Script v6 authoring assistant. Turns Claude into a useful pairing partner f
 
 ## What it does
 
-Two [agentskills.io](https://agentskills.io)-compliant skills:
+Two [agentskills.io](https://agentskills.io)-compliant skills, activated by Claude based on the user's prompt:
 
-- **`pine`** — writes Pine Script v6 indicators and strategies from natural-language descriptions. Validates every function call against the v6 allowlist before emitting code. Auto-triggers on Pine Script asks; also responds to `/pine <description>`.
-- **`pine-validate`** — validates a Pine snippet or function name against the v6 allowlist. Auto-triggers on validation asks; also responds to `/pine-validate <snippet>`.
+- **`pine`** — writes Pine Script v6 indicators and strategies from natural-language descriptions. Validates every function call against the v6 allowlist before emitting code.
+- **`pine-validate`** — validates a Pine snippet or function name against the v6 allowlist.
+
+In Claude Code, you can also invoke either skill explicitly by typing `/pine` or `/pine-validate` followed by your request — this is a Claude Code convention and not part of the agentskills.io spec.
 
 The plugin's primary value is **first-try, validated Pine v6 code** — no hallucinated function names, no v5/v6 confusion.
 
@@ -66,12 +68,7 @@ plugin/
 └── README.md
 ```
 
-Both skills conform strictly to the [agentskills.io specification](https://agentskills.io/specification.md). Validate with:
-
-```bash
-uvx --from skills-ref agentskills validate plugin/skills/pine
-uvx --from skills-ref agentskills validate plugin/skills/pine-validate
-```
+Both skills conform strictly to the [agentskills.io specification](https://agentskills.io/specification.md) — only the spec-defined frontmatter fields are used (`name`, `description`, `license`, `compatibility`, `metadata`), so the skills are portable to any agentskills.io-compliant client.
 
 ## License
 

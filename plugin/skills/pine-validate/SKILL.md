@@ -2,12 +2,12 @@
 name: pine-validate
 description: >-
   Validates Pine Script v6 function calls against the official v6 allowlist via
-  the pinescript MCP server. Use when the user invokes /pine-validate, pastes a
-  Pine Script snippet and asks whether it compiles, asks whether a specific
-  function like ta.adx, ta.sum, security(), study() or request.security() is a
-  valid Pine v6 function, asks Claude to check a Pine script for hallucinated
-  or renamed function references before running it on TradingView, or asks to
-  audit a snippet for v5-to-v6 migration issues. Extracts every function call,
+  the pinescript MCP server. Use when the user pastes a Pine Script snippet
+  and asks whether it compiles, asks whether a specific function like ta.adx,
+  ta.sum, security(), study() or request.security() is a valid Pine v6
+  function, asks Claude to check a Pine script for hallucinated or renamed
+  function references before running it on TradingView, or asks to audit a
+  snippet for v5-to-v6 migration issues. Extracts every function call,
   validates each via the validate_function MCP tool, and returns a compact
   table of results with known-replacement suggestions for invalid or renamed
   calls. Keywords: validate, Pine Script, Pine v6, TradingView, function,
@@ -32,7 +32,6 @@ check via the tool.
 
 ## When to activate
 
-- The user invokes `/pine-validate` explicitly.
 - The user pastes a Pine Script snippet and asks "does this compile?",
   "is this valid Pine v6?", "check this for errors", or similar.
 - The user asks about a single function: "is `ta.adx` valid?",
@@ -156,8 +155,9 @@ reference file is a cache for human reading.
 User: *"Is this snippet valid Pine v6? `plot(ta.rsi(close, 14))
 security(syminfo.tickerid, 'D', close)`"*
 
-1. Extract calls: `plot`, `ta.rsi`, `security`, `syminfo.tickerid`.
-   (`syminfo.tickerid` is a variable, not a call — drop it.)
+1. Extract calls: `plot`, `ta.rsi`, `security`.
+   (`syminfo.tickerid` lacks a trailing `(` and is therefore not a call —
+   the extraction rule already excludes it.)
 2. Call `validate_function` for each of: `plot`, `ta.rsi`, `security`.
 3. Render:
 
