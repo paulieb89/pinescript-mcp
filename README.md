@@ -38,7 +38,7 @@ Works with Claude Code, Claude Desktop, Gemini CLI, and any MCP client that supp
 
 No Python or uvx needed — connect directly to the hosted server.
 
-**Streamable HTTP** — Claude Code, Claude Desktop, Cursor, Cline (standard `mcpServers` with `type` field):
+**Streamable HTTP** — Claude Code, `mcpServers` with `type` field):
 
 ```json
 {
@@ -51,7 +51,7 @@ No Python or uvx needed — connect directly to the hosted server.
 }
 ```
 
-**Windsurf** — uses its own `serverUrl` shape (see [Windsurf docs](https://docs.windsurf.com/windsurf/cascade/mcp#remote-http-mcps)). Edit `~/.codeium/windsurf/mcp_config.json`:
+**Windsurf** — uses its own shape (see [Windsurf docs](https://docs.windsurf.com/windsurf/cascade/mcp#remote-http-mcps)). Edit `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
