@@ -8,7 +8,6 @@ Provides tools to list, search, and read Pine Script v6 documentation.
 import json
 import re
 from pathlib import Path
-from typing import Literal
 
 from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
@@ -17,7 +16,6 @@ from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 from fastmcp.server.transforms import PromptsAsTools
 from fastmcp.utilities.logging import get_logger
-from pydantic import BaseModel
 import time
 import os
 
@@ -54,27 +52,6 @@ tool_duration_seconds = Histogram(
 # Pydantic Models for Structured Output
 # ---------------------------------------------------------------------------
 
-class ValidationResult(BaseModel):
-    """Result of validating a Pine Script function name."""
-    valid: bool
-    type: Literal["namespaced", "toplevel"] | None
-    function: str
-    suggestion: str | None = None
-
-
-class TopicMatch(BaseModel):
-    """A matched documentation topic."""
-    path: str
-    matched_keywords: list[str]
-    score: int
-    read_with: list[str] = []
-
-
-class ResolveResult(BaseModel):
-    """Result of resolving a topic query."""
-    matches: list[TopicMatch]
-    query: str
-    suggestion: str
 
 # Transport + region — inferred from environment, used by _timed_tool for metrics labels
 # Fly.io sets FLY_REGION automatically; "streamable-http" matches ctx.transport literal
@@ -685,47 +662,43 @@ async def get_functions(namespace: str = ""):
     tags={"validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def validate_function(fn_name: str) -> ValidationResult:
+async def validate_function(fn_name: str) -> str:
     """Check if a Pine Script v6 function name is valid.
 
     Args:
         fn_name: Function name to validate (e.g., "ta.sma", "strategy.entry", "plot")
-
-    Returns:
-        ValidationResult with valid status, type, and suggestion if invalid.
     """
     with _timed_tool("validate_function", fn_name=fn_name):
         fn_name = fn_name.strip()
 
         if not fn_name:
-            return ValidationResult(valid=False, type=None, function="", suggestion="Provide a function name to validate")
+            return "Provide a function name to validate."
         if fn_name in PINE_V6_FUNCTIONS:
-            return ValidationResult(valid=True, type="namespaced", function=fn_name)
+            return f"**Valid** — `{fn_name}` is a known Pine Script v6 function (namespaced)."
         if fn_name in PINE_V6_TOPLEVEL:
-            return ValidationResult(valid=True, type="toplevel", function=fn_name)
+            return f"**Valid** — `{fn_name}` is a known Pine Script v6 function (top-level)."
 
-        # Check known invalid/renamed functions before generic fallback
         if fn_name in KNOWN_REPLACEMENTS:
-            return ValidationResult(valid=False, type=None, function=fn_name, suggestion=KNOWN_REPLACEMENTS[fn_name])
+            return f"**Invalid** — `{fn_name}` was renamed. {KNOWN_REPLACEMENTS[fn_name]}"
 
         if "." in fn_name:
             ns = fn_name.rpartition(".")[0]
             if ns in PINE_V6_NAMESPACES:
-                suggestion = f"Not found in {ns}.*. Use get_functions('{ns}') to see all valid {ns}.* functions."
+                suggestion = f"Not found in `{ns}.*`. Use `get_functions('{ns}')` to see all valid functions."
             else:
                 available = ", ".join(sorted(PINE_V6_NAMESPACES))
-                suggestion = f"Namespace '{ns}' not recognised. Valid namespaces: {available}"
+                suggestion = f"Namespace `{ns}` not recognised. Valid namespaces: {available}"
         else:
-            suggestion = "Not found. Use get_functions() to see all top-level functions, or get_functions(namespace) for a specific namespace."
+            suggestion = "Not found. Use `get_functions()` to browse top-level functions, or `get_functions(namespace)` for a specific namespace."
 
-        return ValidationResult(valid=False, type=None, function=fn_name, suggestion=suggestion)
+        return f"**Invalid** — `{fn_name}` is not a recognised Pine Script v6 function. {suggestion}"
 
 
 @mcp.tool(
     tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def resolve_topic(query: str) -> ResolveResult:
+async def resolve_topic(query: str) -> str:
     """Fast lookup for exact Pine Script API terms and known concepts.
 
     Use for exact function names and Pine Script vocabulary
@@ -736,10 +709,6 @@ async def resolve_topic(query: str) -> ResolveResult:
 
     Args:
         query: Exact Pine Script term or known concept keyword.
-
-    Returns:
-        ResolveResult with matched doc paths. If no match, suggestion
-        directs to search_docs().
     """
     with _timed_tool("resolve_topic", query=query) as log:
         query_lower = query.lower()
@@ -770,10 +739,10 @@ async def resolve_topic(query: str) -> ResolveResult:
             log["fallback_used"] = bool(path_scores)
 
         if not path_scores:
-            return ResolveResult(
-                matches=[],
-                query=query,
-                suggestion="No keyword match. Read the docs://manifest resource for routing guidance, or use search_docs(query) for exact terms."
+            return (
+                f'No match for "{query}". '
+                f"Read the docs://manifest resource for routing guidance, "
+                f'or use search_docs("{query}") to search by keyword.'
             )
 
         ranked = sorted(path_scores.items(), key=lambda x: len(x[1]), reverse=True)
@@ -783,27 +752,26 @@ async def resolve_topic(query: str) -> ResolveResult:
         for path, keywords in ranked:
             companions = DOC_COMPANIONS.get(path, [])
             filtered_companions = [c for c in companions if c not in existing_paths]
-            matches.append(TopicMatch(
-                path=path,
-                matched_keywords=keywords,
-                score=len(keywords),
-                read_with=filtered_companions,
-            ))
+            matches.append({"path": path, "keywords": keywords, "read_with": filtered_companions})
 
-        top_path = matches[0].path
+        top_path = matches[0]["path"]
         if top_path in LARGE_DOCS:
             suggestion = f"Large file — use list_sections('{top_path}') to find headers, then get_section() to read specific sections."
         elif len(matches) > 1:
-            paths = [m.path for m in matches[:3]]
+            paths = [m["path"] for m in matches[:3]]
             suggestion = f"Read these together: {', '.join(paths)}. Use get_section() for large files."
         else:
-            suggestion = f"Use get_doc('{top_path}') to read the top match"
+            suggestion = f"Use get_doc('{top_path}') to read the top match."
 
-        return ResolveResult(
-            matches=matches,
-            query=query,
-            suggestion=suggestion
-        )
+        lines = [f"# resolve_topic: {query}", ""]
+        for m in matches:
+            lines.append(f"- `{m['path']}` — matched: {', '.join(m['keywords'])}")
+            if m["read_with"]:
+                lines.append(f"  Read with: {', '.join(m['read_with'])}")
+        lines.append("")
+        lines.append(suggestion)
+
+        return "\n".join(lines)
 
 
 
