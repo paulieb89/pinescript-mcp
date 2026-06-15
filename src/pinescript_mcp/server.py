@@ -549,6 +549,7 @@ async def search_docs(
             current_start = 0
             current_header = "(preamble)"
             current_level = 0
+            parent_headers: dict[int, str] = {}  # level → most recent header at that level
 
             for i, line in enumerate(lines):
                 header_match = re.match(r'^(#+)\s*(.+)', line)
@@ -558,26 +559,35 @@ async def search_docs(
                     section_text = "\n".join(section_lines)
                     if all(p.search(section_text) for p in patterns) and current_header != "(preamble)":
                         match_count = sum(sum(1 for p in patterns if p.search(l)) for l in section_lines)
+                        parent = parent_headers.get(current_level - 1) if current_level > 2 else None
                         section_hits.append({
                             "file": rel_path,
                             "header": current_header,
+                            "parent": parent,
                             "level": current_level,
                             "matches": match_count,
                             "preview": "\n".join(section_lines[:30]),
                         })
-                    # Open new section
+                    # Open new section — update parent tracking
                     current_header = header_match.group(2).strip()
                     current_level = len(header_match.group(1))
                     current_start = i
+                    parent_headers[current_level] = current_header
+                    # Evict deeper levels — they're no longer valid parents
+                    for lvl in list(parent_headers):
+                        if lvl > current_level:
+                            del parent_headers[lvl]
 
             # Final section
             section_lines = lines[current_start:]
             section_text = "\n".join(section_lines)
             if all(p.search(section_text) for p in patterns) and current_header != "(preamble)":
                 match_count = sum(sum(1 for p in patterns if p.search(l)) for l in section_lines)
+                parent = parent_headers.get(current_level - 1) if current_level > 2 else None
                 section_hits.append({
                     "file": rel_path,
                     "header": current_header,
+                    "parent": parent,
                     "level": current_level,
                     "matches": match_count,
                     "preview": "\n".join(section_lines[:30]),
@@ -593,8 +603,10 @@ async def search_docs(
 
         output = [f"# Search results for: {query}", f"Found {len(results)} matching sections", ""]
         for r in results:
-            output.append(f"## {r['file']} → {r['header']}")
-            output.append(f"Use: get_section(\"{r['file']}\", \"{r['header']}\")")
+            label = f"{r['parent']} → {r['header']}" if r.get("parent") else r["header"]
+            hint_header = r["parent"] if r.get("parent") else r["header"]
+            output.append(f"## {r['file']} → {label}")
+            output.append(f"Use: get_section(\"{r['file']}\", \"{hint_header}\")")
             output.append(f"({r['matches']} matches)")
             output.append("")
             output.append(r["preview"])
