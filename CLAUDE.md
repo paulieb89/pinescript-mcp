@@ -62,11 +62,6 @@ fly deploy                                   # Deploy Fly.io
 uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 ```
 
-## Known Issues / Pending Fixes (before June 2, 2026)
-
-- `.github/workflows/release.yml`: rename `skip_existing` → `skip-existing` in `pypa/gh-action-pypi-publish` (deprecated input)
-- `.github/workflows/release.yml`: update `actions/checkout@v4` and `astral-sh/setup-uv@v5` to Node.js 24-compatible versions (Node.js 20 runners removed September 16, 2026)
-
 ## Observability
 
 - Tool calls log JSON to stderr via `_timed_tool` context manager
