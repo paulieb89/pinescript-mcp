@@ -8,6 +8,7 @@ Provides tools to list, search, and read Pine Script v6 documentation.
 import json
 import re
 from pathlib import Path
+from typing import Annotated
 
 from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
@@ -16,6 +17,7 @@ from fastmcp.server.middleware.logging import StructuredLoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 from fastmcp.server.transforms import PromptsAsTools
 from fastmcp.utilities.logging import get_logger
+from pydantic import Field
 import time
 import os
 
@@ -389,12 +391,10 @@ def _validate_path(path: str) -> Path:
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
 async def list_docs():
-    """List all available Pine Script v6 documentation files with descriptions.
-
-    Returns files organised by category with descriptions.
-    For small files use get_doc(path). For large files
-    (ta.md, strategy.md, collections.md, drawing.md, general.md)
-    use list_sections(path) then get_section(path, header).
+    """USE WHEN discovering what Pine Script v6 documentation is available.
+    Returns a categorised list of doc file paths with one-line descriptions.
+    AFTER calling this tool, call get_doc(path) for small files or list_sections(path) then get_section(path, header) for large files (ta.md, strategy.md, collections.md, drawing.md, general.md).
+    Data sourced from bundled Pine Script v6 documentation.
     """
     with _timed_tool("list_docs"):
         output = ["# Pine Script v6 Documentation", ""]
@@ -436,16 +436,13 @@ async def list_docs():
     tags={"reference", "discovery"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def list_sections(path: str):
-    """List all section headers in a doc file. Use before get_section() to find the right header.
-
-    Especially useful for large files like ta.md, strategy.md, collections.md, drawing.md, general.md
-    which have 50-115 sections each.
-
-    Args:
-        path: Documentation file path (e.g., "reference/functions/ta.md")
-
-    Returns top-level section headers (## level) for navigation. Subsections (###) are omitted since get_section(include_children=True) returns them when reading.
+async def list_sections(
+    path: Annotated[str, Field(description="Documentation file path (e.g., 'reference/functions/ta.md').")],
+):
+    """USE WHEN navigating a large documentation file before reading a specific section.
+    Returns a newline-separated list of # and ## headers (### excluded) in the file.
+    AFTER calling this tool, call get_section(path, header) with a header from this list.
+    Data sourced from bundled Pine Script v6 documentation.
     """
     with _timed_tool("list_sections", path=path) as log:
         try:
@@ -464,19 +461,15 @@ async def list_sections(path: str):
     tags={"reference"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_doc(path: str, limit: int = 0, offset: int = 0):
-    """Read a specific Pine Script v6 documentation file.
-
-    For large files (ta.md, strategy.md, collections.md, drawing.md,
-    general.md) prefer list_sections() + get_section() to avoid
-    loading 1000-2800 line files into context.
-
-    Args:
-        path: Relative path to the documentation file (e.g., "reference/functions/ta.md")
-        limit: Maximum characters to return. Use 30000 for large files to avoid token limits.
-        offset: Character offset to start reading from (default: 0)
-
-    Returns the contents with metadata header showing total size and current slice.
+async def get_doc(
+    path: Annotated[str, Field(description="Relative path to the documentation file (e.g., 'reference/functions/ta.md').")],
+    limit: Annotated[int, Field(description="Maximum characters to return. Use 30000 for large files. 0 = no limit.", ge=0)] = 0,
+    offset: Annotated[int, Field(description="Character offset to start reading from.", ge=0)] = 0,
+):
+    """USE WHEN reading the full content of a Pine Script v6 documentation file.
+    Returns the file content; when limit is set, a header shows the char range and offset to continue reading.
+    AFTER calling this tool, use offset=<end> to continue if the header indicates more content is available. For large files (ta.md, strategy.md, collections.md, drawing.md, general.md), prefer list_sections() + get_section() instead.
+    Data sourced from bundled Pine Script v6 documentation.
     """
     # Enforce safe default for large files before any processing
     if limit == 0 and path in LARGE_DOCS:
@@ -509,18 +502,15 @@ async def get_doc(path: str, limit: int = 0, offset: int = 0):
     tags={"reference"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_section(path: str, header: str, include_children: bool = True):
-    """Get a specific section from a documentation file by its header.
-
-    Use after list_sections() shows available headers, or after
-    resolve_topic() / search_docs() identifies the relevant file.
-
-    Args:
-        path: Documentation file path (e.g., "reference/functions/strategy.md")
-        header: Header text to find (e.g., "strategy.exit()" or "## strategy.exit()")
-        include_children: Include nested subsections under the header (default: True)
-
-    Returns the section content from the header to the next same-level header.
+async def get_section(
+    path: Annotated[str, Field(description="Documentation file path (e.g., 'reference/functions/strategy.md').")],
+    header: Annotated[str, Field(description="Header text to find (e.g., 'strategy.exit()' or '## strategy.exit()').")],
+    include_children: Annotated[bool, Field(description="Include nested subsections under the matched header.")] = True,
+):
+    """USE WHEN reading a specific named section from a Pine Script v6 documentation file.
+    Returns the section content from the matched header to the next same-level header, with file path and line range.
+    AFTER calling this tool, call list_sections(path) if the header was not found, or get_section() again with a child header for a narrower subsection.
+    Data sourced from bundled Pine Script v6 documentation.
     """
     with _timed_tool("get_section", path=path, header=header) as log:
         try:
@@ -537,21 +527,14 @@ async def get_section(path: str, header: str, include_children: bool = True):
     tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def search_docs(query: str, max_results: int = 5):
-    """Search Pine Script v6 documentation and return matching sections.
-
-    Finds sections containing the query and returns previews with
-    get_section() call hints so you can read the full content.
-
-    Multi-word queries use AND logic: all terms must appear in the
-    section (not necessarily on the same line).
-
-    Args:
-        query: Search terms (case-insensitive). Multi-word queries
-               match sections containing ALL terms.
-        max_results: Maximum sections to return (default: 5)
-
-    Returns matching sections ranked by relevance with get_section() hints.
+async def search_docs(
+    query: Annotated[str, Field(description="Search terms (case-insensitive). Multi-word queries match sections containing ALL terms.", min_length=1)],
+    max_results: Annotated[int, Field(description="Maximum sections to return.", ge=1, le=20)] = 5,
+):
+    """USE WHEN finding documentation sections that match specific terms across all Pine Script v6 docs.
+    Returns up to max_results sections ranked by match count, each with a preview and a get_section() call hint.
+    AFTER calling this tool, call get_section(file, header) for each result you want to read in full.
+    Data sourced from bundled Pine Script v6 documentation.
     """
     with _timed_tool("search_docs", query=query, max_results=max_results) as log:
         tokens = query.strip().split()
@@ -623,17 +606,13 @@ async def search_docs(query: str, max_results: int = 5):
     tags={"reference", "validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def get_functions(namespace: str = ""):
-    """Get valid Pine Script v6 functions, optionally filtered by namespace.
-
-    Use before writing Pine Script to see which functions exist.
-    For checking a single function name, use validate_function() instead.
-
-    Args:
-        namespace: Filter by namespace (e.g., "ta", "strategy", "request").
-                   Empty string returns all functions grouped by namespace.
-
-    Returns a formatted text list of function names.
+async def get_functions(
+    namespace: Annotated[str, Field(description="Filter by namespace (e.g., 'ta', 'strategy', 'request'). Empty string returns all functions grouped by namespace.")] = "",
+):
+    """USE WHEN browsing valid Pine Script v6 functions, optionally filtered to a namespace.
+    Returns function names grouped by namespace (e.g. ta.*, strategy.*) or filtered to the requested namespace.
+    AFTER calling this tool, call validate_function(fn_name) to check a specific name, or get_section() to read its documentation.
+    Data sourced from bundled pine_v6_functions.json.
     """
     with _timed_tool("get_functions", namespace=namespace or "(all)"):
         if not PINE_V6_FUNCTIONS:
@@ -662,11 +641,13 @@ async def get_functions(namespace: str = ""):
     tags={"validation"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def validate_function(fn_name: str) -> str:
-    """Check if a Pine Script v6 function name is valid.
-
-    Args:
-        fn_name: Function name to validate (e.g., "ta.sma", "strategy.entry", "plot")
+async def validate_function(
+    fn_name: Annotated[str, Field(description="Function name to validate (e.g., 'ta.sma', 'strategy.entry', 'plot').", min_length=1)],
+) -> str:
+    """USE WHEN confirming a Pine Script v6 function name is valid before using it in code.
+    Returns a valid/invalid verdict with namespace suggestions or known replacement hints (e.g. ta.adx → ta.dmi, security → request.security).
+    AFTER calling this tool, call get_functions(namespace) to list all valid functions in the relevant namespace if the function is invalid.
+    Data sourced from bundled pine_v6_functions.json.
     """
     with _timed_tool("validate_function", fn_name=fn_name):
         fn_name = fn_name.strip()
@@ -698,17 +679,13 @@ async def validate_function(fn_name: str) -> str:
     tags={"search"},
     annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
 )
-async def resolve_topic(query: str) -> str:
-    """Fast lookup for exact Pine Script API terms and known concepts.
-
-    Use for exact function names and Pine Script vocabulary
-    (e.g., "ta.rsi", "strategy.entry", "repainting", "request.security").
-
-    For natural language questions, read the docs://manifest resource
-    for routing guidance, then use get_doc() or list_sections() + get_section().
-
-    Args:
-        query: Exact Pine Script term or known concept keyword.
+async def resolve_topic(
+    query: Annotated[str, Field(description="Exact Pine Script term or known concept keyword (e.g., 'ta.rsi', 'strategy.entry', 'repainting').", min_length=1)],
+) -> str:
+    """USE WHEN looking up an exact Pine Script API term or known concept keyword.
+    Returns the best-matching doc paths with matched keywords and a retrieval suggestion (get_doc or list_sections + get_section).
+    AFTER calling this tool, follow the suggestion: call get_doc() for small files or list_sections() + get_section() for large files. For natural language questions use search_docs() instead.
+    Data sourced from bundled TOPIC_MAP and doc file content scan.
     """
     with _timed_tool("resolve_topic", query=query) as log:
         query_lower = query.lower()
@@ -975,9 +952,8 @@ class _AcceptNormalizer:
 
     Workaround for modelcontextprotocol/python-sdk#2349 — the MCP SDK
     requires both application/json AND text/event-stream in the Accept
-    header (even in SSE mode), but Anthropic's MCP proxy and other
-    clients send them separately per request type. Stamp the combined
-    value on /mcp only; SSE paths (/sse, /messages) pass through.
+    header, but Anthropic's MCP proxy and other clients send them
+    separately per request type. Stamp the combined value on /mcp only.
     """
     def __init__(self, app, mcp_path: str = "/mcp"):
         self.app = app
@@ -1011,24 +987,9 @@ def main():
         import asyncio
         import uvicorn
 
-        # Serve both transports on the same port:
-        #   streamable-http at /mcp  (Claude.ai, modern clients)
-        #   SSE at /sse + /messages/ (Cursor, Cline, Windsurf, ChatGPT)
-        # stateless_http=True: no per-session state — safe for Fly.io multi-instance routing
-        streamable_app = mcp.http_app(transport="http", stateless_http=True)
-        sse_app = mcp.http_app(transport="sse", stateless_http=True)
-
-        async def app(scope, receive, send):
-            """ASGI dispatcher: route SSE paths to sse_app, everything else to streamable_app."""
-            if scope["type"] == "lifespan":
-                # Both apps share the same FastMCP instance; one lifespan suffices
-                await streamable_app(scope, receive, send)
-                return
-            path = scope.get("path", "")
-            if path.startswith("/sse") or path.startswith("/messages"):
-                await sse_app(scope, receive, send)
-            else:
-                await streamable_app(scope, receive, send)
+        # Streamable HTTP only — legacy SSE transport (/sse + /messages/) dropped.
+        # stateless_http=True: no per-session state, safe for Fly.io multi-instance routing.
+        app = mcp.http_app(path="/mcp", stateless_http=True)
 
         config = uvicorn.Config(
             _HttpGuard(_AcceptNormalizer(app)),

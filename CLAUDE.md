@@ -82,7 +82,7 @@ uvx mcp-inspector uvx pinescript-mcp         # Test with inspector
 - `list_sections` filters to `##` headers only — `###` subsections are noise for navigation
 - Custom `CollectorRegistry` for Prometheus — avoids default Python GC/process metrics
 - No BM25SearchTransform — 14 tools is small enough for direct visibility; BM25 hid tools and broke client interop
-- `stateless_http=True` on both HTTP apps — Fly.io routes across instances, no session affinity needed
+- `stateless_http=True` on Streamable HTTP app — Fly.io routes across instances without sticky sessions. Legacy SSE transport (`/sse` + `/messages/`) was dropped: it ran stateful sessions incompatible with multi-instance routing, causing ~98% tool errors via that transport
 - PromptsAsTools applied globally — ResourcesAsTools intentionally omitted (companion tools already cover all 3 resources with pagination/filtering)
 
 See @DEVELOPMENT.md for project structure and contributor workflows.

@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "fastmcp==3.2.4",
+    "fastmcp==3.3.0",
     "mcp==1.26.0",
     "pydantic==2.12.5",
     "httpx==0.28.1",
