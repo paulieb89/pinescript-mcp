@@ -6,7 +6,7 @@
 - `study()` was removed in v4+. Use `indicator()`.
 
 ## Types
-bool, int, float, string, color, array, matrix, map, box, label, line, linefill, polyline, table, chart.point, enum
+bool, int, float, string, color, array, matrix, map, box, label, line, linefill, polyline, table, chart.point, enum, footprint, volume_row
 
 ## Type Qualifiers
 - `const` — compile-time constant
@@ -25,7 +25,7 @@ var, varip, if, else, for, for...in, while, switch, import, export, method, type
 ## Valid Namespaces & Function Count
 - `ta.*` (50): sma, ema, rsi, macd, atr, stoch, crossover, crossunder, change, highest, lowest, bb, cci, vwap, supertrend, etc.
 - `strategy.*` (30+): entry, exit, close, close_all, cancel, order, risk.*, closedtrades.*, opentrades.*, convert_to_account, default_entry_qty
-- `request.*` (9): security, security_lower_tf, currency_rate, dividends, earnings, economic, financial, seed, splits
+- `request.*` (10): security, security_lower_tf, currency_rate, dividends, earnings, economic, financial, footprint, seed, splits
 - `input.*` (13): int, float, string, bool, color, source, session, symbol, timeframe, time, price, text_area, enum
 - `math.*` (25): abs, max, min, round, floor, ceil, sqrt, pow, log, avg, sum, random, round_to_mintick, sign, etc.
 - `str.*` (18): tostring, tonumber, contains, format, format_time, length, substring, replace, replace_all, split, match, etc.
@@ -172,6 +172,7 @@ request.security(symbol, timeframe, expression, gaps, lookahead, ignore_invalid_
 - `barstate.isconfirmed` inside `request.security()` expression is unreliable
 - `var` resets on `strategy.close_all()` — use `varip` if needed across trades
 - String concatenation: use `+` operator or `str.format()`
+- Multiline strings: use triple quotes `"""..."""` or `'''...'''` — newlines are inserted automatically; indentation inside the block is literal (no auto-trim)
 - No `format.currency` constant — use `format.mintick` or manual "$" + str.tostring()
 - `chart.fg_color` IS valid in v6 (added 2025)
 - `na()` and `nz()` do NOT accept `series bool` — they only work with numeric types. To safely check a previous bool value: use `myBool[1] == true ? true : false` instead of `nz(myBool[1], false)` or `na(myBool[1])`

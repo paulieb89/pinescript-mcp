@@ -765,6 +765,161 @@ async def resolve_topic(
 
 
 # ---------------------------------------------------------------------------
+# Semantic Tools — backed by ai-ready-data
+# ---------------------------------------------------------------------------
+
+@mcp.tool(
+    tags={"search", "semantic"},
+    annotations={"readOnlyHint": True, "idempotentHint": False, "openWorldHint": True}
+)
+async def semantic_search_pine_docs(
+    query: Annotated[str, Field(description="Natural language question or description (e.g., 'how to prevent repainting in higher timeframe strategies').", min_length=1)],
+    top_k: Annotated[int, Field(description="Number of results to return.", ge=1, le=20)] = 5,
+) -> str:
+    """USE WHEN answering conceptual, fuzzy, or natural language questions about Pine Script v6.
+    Returns ranked documentation chunks with score, source path, and section header. Each result includes a get_section() call hint for retrieving the full content.
+    AFTER calling this tool, call get_section(path, header) on the top results for complete context. For exact API term lookups use resolve_topic() instead; for keyword grep use search_docs() instead.
+    Data sourced from the ai-ready-data pinescript-v06 semantic index.
+    """
+    from pinescript_mcp.ai_ready import get_client, get_settings, AiReadyError
+
+    settings = get_settings()
+    if not settings.configured:
+        raise ToolError(
+            "AI_READY_BASE_URL is not configured. "
+            "Set this environment variable to enable semantic search."
+        )
+
+    with _timed_tool("semantic_search_pine_docs", query=query, top_k=top_k) as log:
+        try:
+            client = get_client()
+            results = await client.search(query, top_k=top_k)
+        except AiReadyError as exc:
+            log["error"] = str(exc)
+            raise ToolError(
+                f"Semantic search failed: {exc}"
+                + (" (retryable)" if exc.retryable else "")
+            )
+
+        log["results_found"] = len(results)
+        if not results:
+            return f"No semantic results found for: {query}"
+
+        lines = [
+            f"# Semantic search: {query}",
+            f"Found {len(results)} results from ai-ready pinescript-v06 index",
+            "",
+        ]
+        for i, r in enumerate(results, 1):
+            score_str = f" (score: {r.score:.3f})" if r.score is not None else ""
+            header = r.title or "(untitled)"
+            path = r.path or "unknown"
+            lines.append(f"## Result {i}{score_str}")
+            lines.append(f"**Source:** `{path}` → {header}")
+            if r.path and r.title:
+                lines.append(f"**Retrieve full content:** `get_section(\"{r.path}\", \"{r.title}\")`")
+            lines.append("")
+            # Trim to ~800 chars to keep the response manageable
+            snippet = r.text[:800]
+            if len(r.text) > 800:
+                snippet += "\n[…]"
+            lines.append(snippet)
+            lines.append("")
+        return "\n".join(lines)
+
+
+@mcp.tool(
+    tags={"search", "semantic", "debugging"},
+    annotations={"readOnlyHint": True, "idempotentHint": False, "openWorldHint": True}
+)
+async def explain_pine_error(
+    error_text: Annotated[str, Field(description="The exact error message from the TradingView Pine Script compiler or runtime.", min_length=1)],
+    code: Annotated[str | None, Field(description="Optional: the Pine Script code that produced the error.")] = None,
+) -> str:
+    """USE WHEN diagnosing a Pine Script compilation or runtime error.
+    Returns semantically relevant documentation chunks alongside the bundled common-errors reference. If the error mentions an unknown function name, also call validate_function() after this tool.
+    AFTER calling this tool, call validate_function(fn_name) if the error mentions an unrecognised function; call get_section() on any suggested doc paths to read full context.
+    Data sourced from ai-ready-data semantic index and bundled concepts/common_errors.md.
+    """
+    from pinescript_mcp.ai_ready import get_client, get_settings, AiReadyError
+
+    settings = get_settings()
+    semantic_section = ""
+
+    with _timed_tool("explain_pine_error", has_code=code is not None) as log:
+        if not settings.configured:
+            log["ai_ready_available"] = False
+            semantic_section = (
+                "\n> **Warning:** Semantic ai-ready search unavailable because "
+                "AI_READY_BASE_URL is not configured. "
+                "Returned bundled common errors reference only.\n"
+            )
+        else:
+            try:
+                client = get_client()
+                results = await client.search(error_text, top_k=3)
+                log["ai_ready_available"] = True
+                log["semantic_results"] = len(results)
+
+                if results:
+                    sem_lines = ["\n## Relevant documentation (semantic search)\n"]
+                    for i, r in enumerate(results, 1):
+                        score_str = f" (score: {r.score:.3f})" if r.score is not None else ""
+                        header = r.title or "(untitled)"
+                        path = r.path or "unknown"
+                        sem_lines.append(f"### Result {i}{score_str} — `{path}` → {header}\n")
+                        snippet = r.text[:600]
+                        if len(r.text) > 600:
+                            snippet += "\n[…]"
+                        sem_lines.append(snippet)
+                        if r.path and r.title:
+                            sem_lines.append(
+                                f"\n_Full context: `get_section(\"{r.path}\", \"{r.title}\")`_"
+                            )
+                        sem_lines.append("")
+                    semantic_section = "\n".join(sem_lines)
+                else:
+                    semantic_section = "\n_No semantic results found for this error text._\n"
+
+            except AiReadyError as exc:
+                log["ai_ready_error"] = str(exc)
+                semantic_section = (
+                    f"\n> **Warning:** Semantic search failed: {exc}. "
+                    "Bundled reference only.\n"
+                )
+
+        # Always include bundled common_errors.md (first 4000 chars)
+        common_errors = _get_doc_content("concepts/common_errors.md")
+        common_errors_excerpt = common_errors[:4000]
+        if len(common_errors) > 4000:
+            common_errors_excerpt += "\n[…] (use get_doc(\"concepts/common_errors.md\") for full content)"
+
+        parts = [
+            "# explain_pine_error",
+            "",
+            "## Error",
+            f"```\n{error_text}\n```",
+        ]
+        if code:
+            parts += [
+                "",
+                "## Code submitted",
+                f"```pine\n{code}\n```",
+            ]
+        parts += [
+            semantic_section,
+            "## Bundled common errors reference",
+            "",
+            common_errors_excerpt,
+            "",
+            "---",
+            "_Tip: if the error mentions an unrecognised function name, "
+            "call `validate_function(fn_name)` for replacement hints._",
+        ]
+        return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Prompt Templates
 # ---------------------------------------------------------------------------
 

@@ -72,6 +72,7 @@ Chart", which is faster and more authoritative than a server-side linter.
 
 - **`reference/types.md`**
   - Type system: `int`, `float`, `bool`, `color`, `string`, `line`, `label`, `box`, `simple`, `series`, `const`
+  - Also: `footprint` and `volume_row` types (volume footprint data), multiline string syntax (`"""..."""`)
 
 - **`reference/keywords.md`**
   - Language keywords: `if`, `else`, `switch`, `for`, `while`, `export`, `import`, `method`
@@ -99,7 +100,8 @@ Chart", which is faster and more authoritative than a server-side linter.
   - Read with: `concepts/execution_model.md`
 
 - **`reference/functions/request.md`**
-  - External data: `request.security`, `request.financial`, `request.seed`, `request.currency_rate`
+  - External data: `request.security`, `request.financial`, `request.seed`, `request.currency_rate`, `request.footprint`
+  - `request.footprint()` — volume footprint data; returns `footprint` type (Premium/Ultimate plan)
   - Read with: `concepts/timeframes.md`
 
 - **`reference/functions/drawing.md`** (~110 sections)
@@ -107,6 +109,7 @@ Chart", which is faster and more authoritative than a server-side linter.
 
 - **`reference/functions/collections.md`** (~115 sections)
   - Data structures: `array.new`, `array.push`, `matrix.new`, `matrix.mult`, `map.new`, `map.put`
+  - `array.sort()` / `array.sort_indices()` accept `sort_field` (const int or string) to sort UDT arrays by field
 
 - **`reference/functions/general.md`** (~115 sections)
   - Math, strings, inputs: `math.abs`, `math.round`, `str.tostring`, `str.format`, `input.int`, `input.bool`, `alert()`
@@ -148,6 +151,35 @@ Chart", which is faster and more authoritative than a server-side linter.
 
 - **`reference/migration_v5_to_v6.md`** — Breaking changes, renamed functions, v5 → v6 migration guide
   - Keywords: `migrate`, `v5 to v6`, `deprecated`, `study()`, `security()`, `upgrade`
+
+---
+
+## 7. Semantic Search (ai-ready-data)
+
+These tools query an external semantic index. Use them when deterministic keyword search is insufficient.
+
+- **`semantic_search_pine_docs(query, top_k=5)`**
+  - Natural language / conceptual questions about Pine Script behaviour
+  - Returns ranked chunks with source path and section header
+  - Follow up with `get_section(path, header)` for full content
+
+- **`explain_pine_error(error_text, code=None)`**
+  - Paste the TradingView compiler or runtime error message
+  - Returns semantically relevant docs + bundled `concepts/common_errors.md`
+  - Follow up with `validate_function(fn_name)` if error mentions an unknown function
+
+---
+
+## Tool Selection Rules
+
+| Question type | Tool |
+|---|---|
+| Exact API term (`ta.rsi`, `strategy.entry`, `repainting`) | `resolve_topic()` first |
+| Keyword grep / "find uses of X" | `search_docs()` |
+| Natural language / conceptual / "how do I…" | `semantic_search_pine_docs()` |
+| Compiler / runtime error | `explain_pine_error()` |
+| Is this function valid? | `validate_function()` |
+| v5 → v6 migration | `resolve_topic("migration")` |
 
 ---
 
@@ -217,4 +249,25 @@ get_section("reference/functions/request.md", "request.security()")  ← non-rep
 resolve_topic("varip")
   → concepts/execution_model.md
 get_doc("concepts/execution_model.md")
+```
+
+**"Why does my indicator repaint on the live bar?"** — conceptual → semantic
+```
+semantic_search_pine_docs("indicator repainting live bar lookahead")
+  → top results with path + section
+get_section(path, section)     ← read each top result in full
+```
+
+**"Cannot use 'series string' where 'simple string' is expected"** — compiler error → explain_pine_error
+```
+explain_pine_error("Cannot use 'series string' where 'simple string' is expected")
+  → semantic chunks + concepts/common_errors.md
+get_section("concepts/common_errors.md", ...)   ← if more detail needed
+```
+
+**"ta.adx is not a function"** — compiler error with bad function name → explain_pine_error + validate
+```
+explain_pine_error("Undeclared identifier 'ta.adx'")
+validate_function("ta.adx")
+  → "Use ta.dmi() instead"
 ```

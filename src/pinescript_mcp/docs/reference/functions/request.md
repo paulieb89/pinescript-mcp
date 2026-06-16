@@ -1,3 +1,55 @@
+## request.footprint()
+
+Requests volume footprint data for the current bar. Returns a `footprint` object containing buy/sell volume distribution across price levels, enabling Point of Control (POC) and Value Area analysis.
+
+### Syntax
+```
+request.footprint(ticks_per_row, va_percent, imbalance_percent) → series footprint
+```
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| ticks_per_row | simple int | no | — |
+| va_percent | simple float | no | 70.0 |
+| imbalance_percent | simple float | no | — |
+
+- `ticks_per_row` — number of ticks per footprint row. Determines row height in the footprint grid.
+- `va_percent` — value area percentage (0–100). The Value Area is the price range containing this percentage of total volume. Default is 70%.
+- `imbalance_percent` — threshold (0–100) for flagging buy/sell imbalance at a price level.
+
+### Returns
+`series footprint` — a footprint object for the current bar, or `na` if no data is available.
+
+### Key Methods on footprint
+- `footprint.poc()` → `volume_row` — row with highest total volume (Point of Control)
+- `footprint.vah()` → `volume_row` — top row of Value Area
+- `footprint.val()` → `volume_row` — bottom row of Value Area
+- `footprint.rows()` → `array<volume_row>` — all rows for this bar
+- `footprint.buy_volume(row)` → `float` — buy volume for a given row
+- `footprint.sell_volume(row)` → `float` — sell volume for a given row
+- `footprint.delta(row)` → `float` — buy minus sell (pass no arg for whole-bar delta)
+
+### Key Methods on volume_row
+- `volume_row.up_price()` → `float`
+- `volume_row.down_price()` → `float`
+- `volume_row.volume()` → `float` — total volume at this level
+- `volume_row.delta()` → `float` — buy minus sell at this level
+
+### Remarks
+Requires TradingView Premium or Ultimate subscription. Returns `na` for symbols without footprint data.
+
+### Code Example
+```pine
+//@version=6
+indicator("Volume Footprint", overlay=false)
+fp = request.footprint(ticks_per_row=10, va_percent=70)
+poc = not na(fp) ? footprint.poc(fp) : na
+pocPrice = not na(poc) ? volume_row.up_price(poc) : na
+plot(pocPrice, "POC", color=color.orange)
+```
+
+---
+
 ## request.currency_rate()
 
 Provides a daily rate that can be used to convert a value expressed in the from currency to another in the to currency.

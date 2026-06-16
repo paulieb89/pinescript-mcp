@@ -931,7 +931,20 @@ This function also works with arrays of int and float types, in which case zero 
 
 ## array.sort()
 
-The function sorts the elements of an array.
+The function sorts the elements of an array. For arrays of user-defined type (UDT) objects, use the `sort_field` parameter to specify which field to sort by.
+
+### Syntax
+```
+array.sort(id, order, sort_field) → void
+```
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| id | array | Array to sort (modified in place) |
+| order | order | `order.ascending` (default) or `order.descending` |
+| sort_field | const int \| const string | UDT field to sort by: 0-based index or field name |
+
+The `sort_field` parameter only applies to `array<UDT>`. The referenced field must be of type `int`, `float`, or `string`. Specifying a field of any other type causes a compilation error.
 
 ### Code Example
 ```pine
@@ -945,11 +958,29 @@ if barstate.islast
     label.new(bar_index, close, str.tostring(a))
 ```
 
+```pine
+// Sorting a UDT array by field name
+//@version=6
+indicator("UDT sort by field")
+type Bar
+    float closePrice
+    int barIdx
+
+var bars = array.new<Bar>()
+array.push(bars, Bar.new(close, bar_index))
+array.sort(bars, order.ascending, sort_field="closePrice")
+```
+
 ---
 
 ## array.sort_indices()
 
-Returns an array of indices which, when used to index the original array, will access its elements in their sorted order. It does not modify the original array.
+Returns an array of indices which, when used to index the original array, will access its elements in their sorted order. It does not modify the original array. Supports a `sort_field` parameter for UDT arrays (same rules as `array.sort()`).
+
+### Syntax
+```
+array.sort_indices(id, order, sort_field) → array<int>
+```
 
 ### Code Example
 ```pine

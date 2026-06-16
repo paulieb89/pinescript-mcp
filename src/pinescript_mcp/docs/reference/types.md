@@ -118,6 +118,27 @@ plot(myVar)
 
 ---
 
+## footprint
+
+Keyword used to explicitly declare the "footprint" type of a variable or a parameter. Footprint objects are created by `request.footprint()` and contain volume footprint data for a specific bar — buy/sell volume distribution across price levels, Point of Control (POC), and Value Area.
+
+### Methods
+- `footprint.buy_volume(row)` — buy volume for a given `volume_row`
+- `footprint.sell_volume(row)` — sell volume for a given `volume_row`
+- `footprint.delta(row)` — buy minus sell volume for a row (or for the whole bar when no `row` arg)
+- `footprint.poc()` — returns the `volume_row` with the highest total volume (Point of Control)
+- `footprint.vah()` — returns the `volume_row` at the top of the Value Area
+- `footprint.val()` — returns the `volume_row` at the bottom of the Value Area
+- `footprint.rows()` — returns an array of all `volume_row` objects for the bar
+
+### Remarks
+Available only to TradingView Premium/Ultimate plan subscribers. Footprint objects are always of "series" form. Use `request.footprint()` to obtain them.
+
+### See Also
+`request.footprint()`, `volume_row`
+
+---
+
 ## float
 
 Keyword used to explicitly declare the "float" (floating point) type of a variable or a parameter.
@@ -368,6 +389,19 @@ plot(myVar)
 
 Keyword used to explicitly declare the "string" type of a variable or a parameter.
 
+### Multiline strings (triple-quoted)
+Pine Script v6 supports multiline string literals using triple quotation marks (`"""..."""`) or triple apostrophes (`'''...'''`). A newline character is automatically inserted before each new line — no manual `\n` needed. All whitespace (including indentation) between the delimiters is treated as literal text.
+
+```pine
+string msg = """
+Hello
+world!
+"""
+// Equivalent to "\nHello\nworld!\n"
+```
+
+Single-line strings still use `\n` for newlines: `"Hello\nworld!"`.
+
 ### Remarks
 Explicitly mentioning the type in a variable declaration is optional, except when it is initialized with na. Learn more about Pine Script® types in the User Manual page on the Type System.
 
@@ -402,4 +436,24 @@ if barstate.islastconfirmedhistory
 
 ### Remarks
 Table objects are always of "series" form.
+
+---
+
+## volume_row
+
+Keyword used to explicitly declare the "volume_row" type. A `volume_row` represents a single price-level row within a bar's `footprint` object. Rows are accessed via `footprint.poc()`, `footprint.vah()`, `footprint.val()`, or by iterating `footprint.rows()`.
+
+### Methods
+- `volume_row.up_price()` — upper price boundary of the row
+- `volume_row.down_price()` — lower price boundary of the row
+- `volume_row.delta()` — buy volume minus sell volume for this row
+- `volume_row.buy_volume()` — buy volume at this price level
+- `volume_row.sell_volume()` — sell volume at this price level
+- `volume_row.volume()` — total (buy + sell) volume at this price level
+
+### Remarks
+Obtained from a `footprint` object; never constructed directly. Always of "series" form.
+
+### See Also
+`footprint`, `request.footprint()`
 

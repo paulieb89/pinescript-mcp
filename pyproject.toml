@@ -40,6 +40,17 @@ Repository = "https://github.com/paulieb89/pinescript-mcp"
 [project.scripts]
 pinescript-mcp = "pinescript_mcp.server:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.22",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pinescript_mcp"]
 
