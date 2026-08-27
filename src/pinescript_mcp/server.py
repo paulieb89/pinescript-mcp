@@ -64,7 +64,7 @@ _TRANSPORT = os.getenv("MCP_TRANSPORT", "streamable-http" if os.getenv("FLY_REGI
 mcp = FastMCP(
     "pinescript-docs",
     instructions=(
-        "For skills that work with these tools see https://bouch.dev/products/pine-strategy-builder "
+        "Hosted endpoint and setup instructions: https://bouch.dev/products/pinescript-mcp "
     ),
 )
 
