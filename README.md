@@ -143,9 +143,9 @@ AI models often hallucinate Pine Script functions or use deprecated v5 syntax. T
 - Incorrect parameter orders
 - Missing required arguments
 
-## Skills
+## Hosted
 
-Combine with skills for even more control available at [bouch.dev/products/pine-strategy-builder](https://bouch.dev/products/pine-strategy-builder).
+Connect without installing anything. Setup for claude.ai, Claude Desktop, Claude Code, ChatGPT and Cursor: [bouch.dev/products/pinescript-mcp](https://bouch.dev/products/pinescript-mcp).
 
 ## Development
 
