@@ -4,7 +4,7 @@
   "title": "Pine Script v6 Documentation",
   "description": "Pine Script v6 documentation lookup and function validation for AI code generation",
   "version": "0.7.6",
-  "websiteUrl": "https://bouch.dev",
+  "websiteUrl": "https://bouch.dev/products/pinescript-mcp",
   "repository": {
     "url": "https://github.com/paulieb89/pinescript-mcp",
     "source": "github"
