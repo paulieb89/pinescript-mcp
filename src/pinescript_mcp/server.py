@@ -1073,47 +1073,6 @@ async def metrics(request):
     return Response(generate_latest(METRICS_REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
-class _HttpGuard:
-    """Return a held-open SSE stream for GET /mcp; 405 for DELETE /mcp.
-
-    claude.ai probes GET /mcp to establish an SSE stream before sending MCP
-    protocol messages via POST. With stateless_http=True FastMCP only registers
-    POST routes, so GET returns 405 — claude.ai treats this as a connection
-    failure even though POST works fine.
-
-    Fix: intercept GET /mcp and return 200 text/event-stream held open until
-    the client disconnects. FastMCP never sees the GET; stateless semantics
-    are preserved. DELETE is rejected (405) — stateless servers have no sessions.
-    """
-
-    def __init__(self, app, mcp_path: bytes = b"/mcp"):
-        self.app = app
-        self._mcp_path = mcp_path.rstrip(b"/")
-
-    async def __call__(self, scope, receive, send):
-        if scope.get("type") == "http":
-            path = scope.get("path", "").rstrip("/").encode()
-            method = scope.get("method", "").upper().encode()
-            if path == self._mcp_path:
-                if method == b"GET":
-                    await send({"type": "http.response.start", "status": 200, "headers": [
-                        (b"content-type", b"text/event-stream"),
-                        (b"cache-control", b"no-cache"),
-                        (b"connection", b"keep-alive"),
-                    ]})
-                    await send({"type": "http.response.body", "body": b"", "more_body": True})
-                    while True:
-                        event = await receive()
-                        if event["type"] == "http.disconnect":
-                            break
-                    return
-                if method == b"DELETE":
-                    from starlette.responses import Response as StarletteResponse
-                    await StarletteResponse("Method Not Allowed", status_code=405, headers={"Allow": "POST"})(scope, receive, send)
-                    return
-        await self.app(scope, receive, send)
-
-
 class _AcceptNormalizer:
     """Normalize Accept header on /mcp to prevent 406 Not Acceptable.
 
@@ -1138,6 +1097,14 @@ class _AcceptNormalizer:
         await self.app(scope, receive, send)
 
 
+def create_app():
+    """The ASGI app main() serves over HTTP (tests build it the same way)."""
+    # Streamable HTTP only — legacy SSE transport (/sse + /messages/) dropped.
+    # stateless_http=True: no per-session state, safe for Fly.io multi-instance routing.
+    app = mcp.http_app(path="/mcp", stateless_http=True)
+    return _AcceptNormalizer(app)
+
+
 def main():
     """Entry point for the CLI."""
     import argparse
@@ -1154,12 +1121,8 @@ def main():
         import asyncio
         import uvicorn
 
-        # Streamable HTTP only — legacy SSE transport (/sse + /messages/) dropped.
-        # stateless_http=True: no per-session state, safe for Fly.io multi-instance routing.
-        app = mcp.http_app(path="/mcp", stateless_http=True)
-
         config = uvicorn.Config(
-            _HttpGuard(_AcceptNormalizer(app)),
+            create_app(),
             host=args.host,
             port=args.port,
             log_level="info",
