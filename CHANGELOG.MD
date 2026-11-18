@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.7.6 → v0.7.7
+
+### Fixed: `GET /mcp` returns 405 instead of a held-open stream
+
+The server answered `GET /mcp` with 200 and held an empty event stream open.
+Clients kept those streams, so each one held a connection slot and production
+ran at 26-35 connections around the clock. It now returns 405, like the rest of
+the fleet (#8).
+
 ## v0.6.17 → v0.7.0
 
 ### Removed: `lint_script` and `edit_and_lint` — server is docs-only
