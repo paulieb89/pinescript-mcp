@@ -50,14 +50,17 @@ uk-business-mcp's proxy.
 
 ## Open issues
 
-None in this repo. Fleet: [mcpfleet-obs #11](https://github.com/uk-agents/mcpfleet-obs/issues/11)
-(move the transport layer into the shared package).
+[#12](https://github.com/paulieb89/pinescript-mcp/issues/12) (CLAUDE.md and
+AGENTS.md describe a manual `fly deploy` and PyPI upload). Fleet:
+[mcpfleet-obs #11](https://github.com/uk-agents/mcpfleet-obs/issues/11).
 
 ## Recommended next step
 
-pinescript is on FastMCP 3.3.0 / mcp 1.26.0. Fold it into the fleet's FastMCP
-4.1.8 move (uk-due-diligence-mcp #49, uk-legal-mcp #116, govuk-mcp #11), or adopt
-the shared transport layer from mcpfleet-obs #11 once it exists.
+In the fleet order (FastMCP 4.1.8 first, then the stdio entry points, then the
+shared package), check whether pinescript (FastMCP 3.3.0 / mcp 1.26.0) joins the
+4.1.8 move alongside uk-due-diligence-mcp #49, uk-legal-mcp #116 and govuk-mcp #11.
+Fix #12 before its next release, so the release instructions an agent reads are
+the release.yml flow.
 
 ## Re-verify
 
