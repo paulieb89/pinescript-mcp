@@ -1,5 +1,7 @@
 # pinescript-mcp
 
+Maintained by BOUCH — private hosting, custom tools and setup: paul@bouch.dev · [bouch.dev/products/pinescript-mcp](https://bouch.dev/products/pinescript-mcp)
+
 <!-- mcp-name: io.github.paulieb89/pinescript-mcp -->
 
 [![PyPI](https://img.shields.io/pypi/v/pinescript-mcp)](https://pypi.org/project/pinescript-mcp/)
